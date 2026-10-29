@@ -1,7 +1,91 @@
 #!/usr/bin/env python3
 """Regression checks for independently dated fund data and explicit missingness."""
+import hashlib
+from pathlib import Path
+import tempfile
 import unittest
-from build_full_snapshot import merge, field_date, sanitize_year, validate_collection
+from build_full_snapshot import merge, field_date, sanitize_year, validate_collection, merge_source_evidence
+
+
+class SourceEvidenceTests(unittest.TestCase):
+    def setUp(self):
+        self.folder = tempfile.TemporaryDirectory()
+        self.addCleanup(self.folder.cleanup)
+        self.cache = Path(self.folder.name)
+        self.key = 'base-refresh-2026-10-29/rank-pass0-p1-n10-asc'
+
+    def source(self, raw, key=None, save=True):
+        key = key or self.key
+        if save:
+            path = self.cache / (key + '.txt')
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(raw)
+        return {'key': key, 'url': 'https://fund.eastmoney.com/data/rankhandler.aspx?date=2026-10-29',
+                'sha256': hashlib.sha256(raw).hexdigest(), 'bytes': len(raw), 'retrievedAt': '2026-10-29'}
+
+    def test_same_day_bootstrap_preserves_old_hash_without_pointing_to_new_raw(self):
+        old = self.source(b'old valid response', save=False)
+        current = self.source(b'new valid response')
+        merged = merge_source_evidence([old], [current], self.cache)
+        self.assertEqual(len(merged), 2)
+        inherited, fresh = merged
+        self.assertNotEqual(inherited['key'], fresh['key'])
+        self.assertEqual(inherited['sha256'], old['sha256'])
+        self.assertEqual(inherited['localEvidenceStatus'], 'inherited_metadata_only')
+        self.assertFalse((self.cache / (inherited['key'] + '.txt')).exists())
+        self.assertEqual(fresh['sha256'], current['sha256'])
+        self.assertEqual((self.cache / (fresh['key'] + '.txt')).read_bytes(), b'new valid response')
+        # This is the same key-to-file hash check used by verify_snapshot.cjs.
+        for source in merged:
+            path = self.cache / (source['key'] + '.txt')
+            if path.exists():
+                self.assertEqual(hashlib.sha256(path.read_bytes()).hexdigest(), source['sha256'])
+        repeated = merge_source_evidence(merged, [current], self.cache)
+        self.assertEqual(repeated, merged)
+        self.assertEqual([(s['key'], s['sha256']) for s in repeated],
+                         [(s['key'], s['sha256']) for s in merged])
+
+    def test_tampered_current_raw_and_conflicting_current_entries_are_rejected(self):
+        old = self.source(b'old', save=False)
+        current = self.source(b'new')
+        with self.assertRaisesRegex(ValueError, 'hash/size mismatch'):
+            merge_source_evidence([], [old, current], self.cache)
+        (self.cache / (self.key + '.txt')).write_bytes(b'corrupted')
+        with self.assertRaisesRegex(ValueError, 'hash/size mismatch'):
+            merge_source_evidence([], [current], self.cache)
+
+    def test_versioned_current_collector_migrates_legacy_bootstrap_reference(self):
+        old = self.source(b'old', save=False)
+        current = self.source(b'new')
+        versioned = current['key'] + '.sha256-' + current['sha256']
+        (self.cache / (versioned + '.txt')).write_bytes(b'new')
+        current = {**current, 'key': versioned, 'originalKey': self.key}
+        merged = merge_source_evidence([old], [current], self.cache)
+        self.assertEqual(merged[0]['localEvidenceStatus'], 'inherited_metadata_only')
+        self.assertEqual(merged[1]['key'], versioned)
+        self.assertEqual(merged[1]['localEvidenceStatus'], 'verified')
+
+    def test_unexplained_inherited_corruption_is_not_treated_as_supersession(self):
+        old = self.source(b'original')
+        (self.cache / (self.key + '.txt')).write_bytes(b'corrupted')
+        with self.assertRaisesRegex(ValueError, 'Inherited source evidence hash mismatch'):
+            merge_source_evidence([old], [], self.cache)
+
+    def test_versioned_history_and_separate_keys_remain_verifiable(self):
+        original = self.source(b'old')
+        first = merge_source_evidence([], [original], self.cache)
+        current = self.source(b'new')
+        other = self.source(b'new', key='base-refresh-2026-10-30/rank-pass0-p1-n10-asc')
+        merged = merge_source_evidence(first, [current, other], self.cache)
+        self.assertEqual(len(merged), 3)
+        self.assertEqual(len({source['key'] for source in merged}), 3)
+        for source in merged:
+            self.assertEqual(source['localEvidenceStatus'], 'verified')
+            self.assertEqual(hashlib.sha256((self.cache / (source['key'] + '.txt')).read_bytes()).hexdigest(),
+                             source['sha256'])
+        (self.cache / (first[0]['key'] + '.txt')).write_bytes(b'corrupted version')
+        with self.assertRaisesRegex(ValueError, 'hash/size mismatch'):
+            merge_source_evidence(first, [current], self.cache)
 
 
 class MergeTests(unittest.TestCase):

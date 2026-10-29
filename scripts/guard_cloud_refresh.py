@@ -21,7 +21,7 @@ def compact(meta):
 def check(old, new, today):
     problems = []
     if new['dataDate'] != today:
-        problems.append('Collection date is not today in Asia/Shanghai')
+        problems.append('Collection date differs from this collection attempt')
     if new['directoryCount'] < old['directoryCount'] * .98:
         problems.append('Directory count fell by more than 2 percent')
     for name, previous in old['available'].items():
@@ -31,10 +31,18 @@ def check(old, new, today):
         raise ValueError('; '.join(problems) + '; investigate the source before publishing')
 
 
+def expected_collection_date(value, today):
+    expected = value or today.isoformat()
+    if expected not in {today.isoformat(), (today - dt.timedelta(days=1)).isoformat()}:
+        raise ValueError('Collection start date is outside the current overnight run window')
+    return expected
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--baseline', type=Path, required=True)
     parser.add_argument('--capture', action='store_true')
+    parser.add_argument('--expected-date', help='Date captured when this full collection attempt started (Asia/Shanghai)')
     args = parser.parse_args()
     current = compact(snapshot_metadata(ROOT))
     if args.capture:
@@ -42,8 +50,9 @@ def main():
         print('Baseline coverage saved for release validation.')
     else:
         old = json.loads(args.baseline.read_text())
-        today = dt.datetime.now(ZoneInfo('Asia/Shanghai')).date().isoformat()
-        check(old, current, today)
+        today = dt.datetime.now(ZoneInfo('Asia/Shanghai')).date()
+        expected = expected_collection_date(args.expected_date, today)
+        check(old, current, expected)
         print(json.dumps({'status': 'PASS', 'dataDate': current['dataDate'],
                           'directoryCount': current['directoryCount'], 'available': current['available']}, ensure_ascii=False))
 

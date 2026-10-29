@@ -1,17 +1,39 @@
 #!/usr/bin/env python3
 """Regression checks for market-source parsing and current-year labels."""
 import datetime as dt
+import hashlib
 from pathlib import Path
 import tempfile
 import unittest
 from unittest import mock
 
 from refresh_directory import parse_directory
-from refresh_market_base import check_year_boundary, company_fallback
+from refresh_market_base import check_year_boundary, company_fallback, fetch
 from update_market_total import latest_report
 
 
 class MarketSourceTests(unittest.TestCase):
+    def test_same_day_refetch_preserves_each_response_under_its_own_hash(self):
+        with tempfile.TemporaryDirectory() as folder:
+            cache = Path(folder)
+            day = cache / 'base-refresh-2026-10-29'
+            day.mkdir()
+            records = []
+            key = 'rank-pass0-p1-n10-asc'
+            url = 'https://fund.eastmoney.com/data/rankhandler.aspx?test'
+            with mock.patch('refresh_market_base.CACHE', cache), mock.patch('refresh_market_base.SOURCES', records), \
+                    mock.patch('refresh_market_base.download', side_effect=[(b'old', 200, ''), (b'new', 200, '')]):
+                self.assertEqual(fetch(url, key, lambda text: text, day), 'old')
+                (day / (key + '.txt')).unlink()  # A new same-day collection, retaining prior evidence.
+                self.assertEqual(fetch(url, key, lambda text: text, day), 'new')
+                self.assertEqual(fetch(url, key, lambda text: text, day), 'new')
+            self.assertNotEqual(records[0]['key'], records[1]['key'])
+            self.assertEqual(records[1]['key'], records[2]['key'])
+            self.assertEqual(records[0]['originalKey'], records[1]['originalKey'])
+            for source, raw in zip(records, (b'old', b'new', b'new')):
+                self.assertEqual((cache / (source['key'] + '.txt')).read_bytes(), raw)
+                self.assertEqual(source['sha256'], hashlib.sha256(raw).hexdigest())
+
     def test_directory_accepts_only_complete_unique_codes(self):
         row = '["000001","HX","华夏成长","混合型","HUAXIA"]'
         self.assertEqual(parse_directory(('var r = [' + row + '];').encode())[0][0], '000001')

@@ -12,7 +12,7 @@ import collections
 import datetime as dt
 import hashlib
 import json
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 import re
 from inception_metadata import apply_inception, load_profiles, valid_date, enforce_inception_intervals
 
@@ -98,6 +98,75 @@ def sanitize_year(record, as_of):
             result.pop(key, None)
             result['fieldStatus'][key] = {'status': 'missing', 'reason': 'stopped_before_year' if stamp else 'missing_nav_date', 'asOf': stamp or None}
     return result
+
+
+def merge_source_evidence(previous, current, cache_dir):
+    """Version evidence by content, retaining inherited metadata without false file links."""
+    cache_dir = Path(cache_dir)
+
+    def identity(source):
+        key = source['key']
+        original = source.get('originalKey', key)
+        digest = source['sha256']
+        for name in (key, original):
+            path = PurePosixPath(name)
+            if not name or path.is_absolute() or '..' in path.parts or '\\' in name:
+                raise ValueError('Invalid source evidence key')
+        if not re.fullmatch(r'[0-9a-f]{64}', digest):
+            raise ValueError('Invalid source evidence SHA256: ' + key)
+        return key, original, digest, original + '.sha256-' + digest
+
+    def verified_bytes(path, source):
+        raw = path.read_bytes()
+        if hashlib.sha256(raw).hexdigest() != source['sha256'] or (
+                source.get('bytes') is not None and len(raw) != source['bytes']):
+            raise ValueError('Source evidence hash/size mismatch: ' + source['key'])
+        return raw
+
+    # Verify this run before accepting any supersession of an inherited path.
+    replacements = collections.defaultdict(set)
+    current_bytes = {}
+    for source in current:
+        key, original, digest, _ = identity(source)
+        path = cache_dir / (key + '.txt')
+        if not path.is_file():
+            raise ValueError('Current source evidence file is missing: ' + key)
+        current_bytes[(key, digest)] = verified_bytes(path, source)
+        replacements[original].add(digest)
+
+    result = {}
+    for source, is_current in [(s, False) for s in previous] + [(s, True) for s in current]:
+        key, original, digest, versioned = identity(source)
+        path, target = cache_dir / (key + '.txt'), cache_dir / (versioned + '.txt')
+        raw = None
+        reason = source.get('localEvidenceReason', 'inherited_original_not_in_workspace')
+        if target.is_file():
+            raw = verified_bytes(target, source)
+        elif is_current:
+            raw = current_bytes[(key, digest)]
+        elif path.is_file():
+            candidate = path.read_bytes()
+            actual = hashlib.sha256(candidate).hexdigest()
+            if actual == digest:
+                raw = verified_bytes(path, source)
+            elif key == original and actual in replacements.get(original, set()):
+                # The bootstrap only carried the old metadata; this run has a
+                # verified newer response at the former mutable cache path.
+                reason = 'legacy_path_replaced_by_verified_current_response'
+            else:
+                raise ValueError('Inherited source evidence hash mismatch: ' + key)
+        if raw is not None and not target.exists():
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(raw)
+        entry = {**source, 'key': versioned, 'originalKey': original,
+                 'localEvidenceStatus': 'verified' if raw is not None else 'inherited_metadata_only'}
+        entry.pop('localEvidenceReason', None)
+        if raw is None:
+            entry['localEvidenceReason'] = reason
+        # A repeated same-day build is stable, and separate logical sources are
+        # retained even when their URL and response bytes happen to be identical.
+        result[versioned] = entry
+    return list(result.values())
 
 
 def validate_collection(directory, manifest, base, codes, as_of):
@@ -209,8 +278,7 @@ def build(args):
         coverage[field] = {'available': available, 'notApplicable': na, 'missing': len(codes) - available - na,
                            'total': len(codes), 'reasons': dict(reasons)}
     now = dt.datetime.now(TZ).isoformat(timespec='seconds')
-    sources = list(old['meta'].get('sources', [])) + base['sources']
-    unique_sources = list({(s['url'], s['sha256']): s for s in sources}.values())
+    unique_sources = merge_source_evidence(old['meta'].get('sources', []), base['sources'], ROOT / 'source-cache')
     details = {c: v for c, v in old.get('details', {}).items() if c in perf}
     for code, raw in details.items():
         raw.setdefault('_fetchedAt', old['meta']['updatedAt'])

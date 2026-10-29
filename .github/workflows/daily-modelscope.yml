@@ -56,11 +56,13 @@ jobs:
       - name: 全目录采集与校验（失败后同日断点重试一次）
         timeout-minutes: 300
         run: |
+          collection_date="$(TZ=Asia/Shanghai date +%F)"
           if ! python scripts/update_all.py --workers 16; then
             echo 'Retrying the full pipeline using same-day checkpoints.'
+            collection_date="$(TZ=Asia/Shanghai date +%F)"
             python scripts/update_all.py --workers 16
           fi
-          python scripts/guard_cloud_refresh.py --baseline baseline-coverage.json
+          python scripts/guard_cloud_refresh.py --baseline baseline-coverage.json --expected-date "$collection_date"
       - name: 构建独立静态网页及版本清单
         run: python scripts/build_cloud_site.py --output cloud-site --version "gh-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
       - name: 发布到原魔搭空间并核验实际运行版本

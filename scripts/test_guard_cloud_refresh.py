@@ -1,5 +1,6 @@
 import unittest
-from guard_cloud_refresh import check, compact
+import datetime as dt
+from guard_cloud_refresh import check, compact, expected_collection_date
 
 
 class CoverageGuardTest(unittest.TestCase):
@@ -25,6 +26,18 @@ class CoverageGuardTest(unittest.TestCase):
     def test_stale_snapshot_cannot_be_relabelled_today(self):
         with self.assertRaisesRegex(ValueError, 'date'):
             check(self.baseline, self.new, '2026-10-30')
+
+    def test_overnight_completion_keeps_true_collection_date(self):
+        expected = expected_collection_date('2026-10-29', dt.date(2026, 10, 30))
+        check(self.baseline, self.new, expected)
+        self.assertEqual(self.new['dataDate'], '2026-10-29')
+
+    def test_default_is_today_and_old_or_future_run_dates_are_rejected(self):
+        today = dt.date(2026, 10, 30)
+        self.assertEqual(expected_collection_date(None, today), '2026-10-30')
+        for value in ('2026-10-28', '2026-10-31', 'invalid'):
+            with self.subTest(value=value), self.assertRaisesRegex(ValueError, 'run window'):
+                expected_collection_date(value, today)
 
     def test_inception_and_year_drawdown_coverage_survive_capture_and_are_guarded(self):
         meta = {'collection': {'asOf': '2026-10-29'}, 'directoryCount': 28000,

@@ -76,8 +76,17 @@ def fetch(url, key, parse, cache_dir):
             parsed = parse(raw.decode('utf-8-sig'))
             if attempt != 0 or not file.exists():
                 file.write_bytes(raw)
-            evidence = {'key': str(file.relative_to(CACHE)).removesuffix('.txt'), 'url': url,
-                        'bytes': len(raw), 'sha256': hashlib.sha256(raw).hexdigest(), 'retrievedAt': retrieved_at}
+            digest = hashlib.sha256(raw).hexdigest()
+            original_key = str(file.relative_to(CACHE)).removesuffix('.txt')
+            versioned = file.with_name(file.stem + '.sha256-' + digest + '.txt')
+            if versioned.exists():
+                if versioned.read_bytes() != raw:
+                    raise ValueError('immutable_source_evidence_mismatch')
+            else:
+                versioned.write_bytes(raw)
+            evidence = {'key': str(versioned.relative_to(CACHE)).removesuffix('.txt'),
+                        'originalKey': original_key, 'url': url, 'bytes': len(raw),
+                        'sha256': digest, 'retrievedAt': retrieved_at}
             SOURCES.append(evidence)
             return parsed
         except Exception as error:
