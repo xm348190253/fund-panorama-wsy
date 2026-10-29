@@ -133,9 +133,16 @@ class Client:
             raise SyncError('ModelScope API returned HTTP ' + str(exc.code)) from None
         except (urllib.error.URLError, TimeoutError, OSError, ValueError) as exc:
             raise SyncError('ModelScope API request failed (' + type(exc).__name__ + ')') from None
-        if not isinstance(value, dict) or value.get('success') is not True or not isinstance(value.get('data'), dict):
+        if not isinstance(value, dict) or value.get('success') is not True:
             raise SyncError('ModelScope API returned an unsuccessful or malformed response')
-        return value['data']
+        data = value.get('data')
+        if method == 'POST' and suffix == '/deploy':
+            # The deployment acknowledgement may omit data. It only confirms
+            # acceptance; wait_verified performs the actual publication checks.
+            return data if isinstance(data, dict) else {}
+        if not isinstance(data, dict):
+            raise SyncError('ModelScope API returned an unsuccessful or malformed response')
+        return data
 
     def verify_configuration(self, info):
         if info.get('id') != self.repo or info.get('sdk_type') != 'static':
@@ -241,7 +248,7 @@ class StudioCheckout:
         return result
 
     def clone(self):
-        self.git('clone', '--single-branch', '--branch', 'master',
+        self.git('clone', '--depth', '1', '--no-tags', '--single-branch', '--branch', 'master',
                  'https://modelscope.cn/studios/' + self.repo + '.git', str(self.path), cwd=self.folder)
         return self.path
 

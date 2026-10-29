@@ -79,6 +79,9 @@ class ModelScopeSyncTests(unittest.TestCase):
         self.assertEqual(kwargs['env']['MODELSCOPE_API_KEY'], TOKEN)
         self.assertEqual(kwargs['env']['GIT_TERMINAL_PROMPT'], '0')
         self.assertIn('credential.helper=', args[0])
+        self.assertIn('--depth', args[0])
+        self.assertEqual(args[0][args[0].index('--depth') + 1], '1')
+        self.assertIn('--no-tags', args[0])
 
     def test_post_has_no_body(self):
         client = sync.Client(sync.DEFAULT_REPO, TOKEN)
@@ -88,6 +91,26 @@ class ModelScopeSyncTests(unittest.TestCase):
         self.assertEqual(request.method, 'POST')
         self.assertIsNone(request.data)
         self.assertEqual(request.full_url, sync.API_BASE + '/studios/' + sync.DEFAULT_REPO + '/deploy')
+
+    def test_deploy_accepts_success_acknowledgement_without_object_data(self):
+        client = sync.Client(sync.DEFAULT_REPO, TOKEN)
+        for response in ({'success': True}, {'success': True, 'data': None},
+                         {'success': True, 'data': True}):
+            with self.subTest(response=response):
+                client.api_opener.open = Mock(return_value=io.BytesIO(json.dumps(response).encode()))
+                self.assertEqual(client.api('POST', '/deploy'), {})
+        client.api_opener.open = Mock(return_value=io.BytesIO(b'{"success":false,"data":{}}'))
+        with self.assertRaisesRegex(sync.SyncError, 'unsuccessful'):
+            client.api('POST', '/deploy')
+
+    def test_get_still_requires_object_data(self):
+        client = sync.Client(sync.DEFAULT_REPO, TOKEN)
+        for response in ({'success': True}, {'success': True, 'data': None},
+                         {'success': True, 'data': True}, {'success': True, 'data': []}):
+            with self.subTest(response=response):
+                client.api_opener.open = Mock(return_value=io.BytesIO(json.dumps(response).encode()))
+                with self.assertRaisesRegex(sync.SyncError, 'malformed'):
+                    client.api()
 
     def test_refuses_paid_hardware_and_other_hosts(self):
         client = sync.Client(sync.DEFAULT_REPO, TOKEN)
