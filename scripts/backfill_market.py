@@ -14,6 +14,7 @@ import datetime as dt
 import gzip
 import hashlib
 import http.client
+import io
 import json
 import math
 import os
@@ -23,7 +24,9 @@ import statistics
 import threading
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
+import zlib
 from zoneinfo import ZoneInfo
 from inception_metadata import apply_inception, load_profiles, valid_date, calculation_input_hash
 
@@ -277,7 +280,50 @@ def normalize(product, raw, evidence, as_of):
                         'aliasEvidence': raw.get('_aliasProof')}, 'sparkline': spark}
 
 
+def _download_full_gzip(url, timeout, max_bytes):
+    # Range requests disable upstream gzip. Try one complete response first;
+    # any transport/compression problem falls back to the original range path.
+    req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0',
+        'Referer': 'https://fund.eastmoney.com/', 'Accept-Encoding': 'gzip'})
+    with urllib.request.urlopen(req, timeout=timeout) as response:
+        if response.status != 200 or response.headers.get('Content-Range') is not None:
+            raise ValueError('compressed_response_is_not_complete')
+        length = response.headers.get('Content-Length')
+        if length is not None and (not re.fullmatch(r'\d+', length) or int(length) > max_bytes):
+            raise ValueError('compressed_response_length_invalid')
+        raw = response.read(max_bytes + 1)
+        if not raw or len(raw) > max_bytes:
+            raise ValueError('compressed_response_exceeds_safety_limit_or_empty')
+        if length is not None and len(raw) != int(length):
+            raise ValueError('compressed_response_length_mismatch')
+        encoding = response.headers.get('Content-Encoding', '').strip().lower()
+    if encoding == 'gzip':
+        # A bounded read validates gzip EOF/CRC without allocating an unbounded
+        # decompressed body. An oversized or truncated member is never returned.
+        with gzip.GzipFile(fileobj=io.BytesIO(raw)) as stream:
+            decoded = stream.read(max_bytes + 1)
+        if not decoded or len(decoded) > max_bytes:
+            raise ValueError('decompressed_source_exceeds_safety_limit_or_empty')
+        return decoded, 200, 1
+    if encoding not in ('', 'identity'):
+        raise ValueError('unsupported_source_content_encoding')
+    return raw, 200, 1
+
+
 def download(url, timeout, max_bytes=16 * 1024 * 1024):
+    parsed = urllib.parse.urlsplit(url)
+    fast_attempts = 0
+    if parsed.hostname == 'fund.eastmoney.com' and parsed.path.startswith('/pingzhongdata/'):
+        fast_attempts = 1
+        try:
+            return _download_full_gzip(url, timeout, max_bytes)
+        except (OSError, ValueError, EOFError, http.client.HTTPException, zlib.error):
+            pass
+    raw, status, attempts = _download_identity(url, timeout, max_bytes)
+    return raw, status, attempts + fast_attempts
+
+
+def _download_identity(url, timeout, max_bytes):
     raw, total, failures, attempts = bytearray(), None, 0, 0
     first_status = None
     while total is None or len(raw) < total:

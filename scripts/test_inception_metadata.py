@@ -145,6 +145,8 @@ class InceptionMetadataTests(unittest.TestCase):
             self.assertEqual(changed['quality']['verifiedInception'], '2026-07-01')
 
 
+@unittest.skipIf(os.environ.get('GITHUB_ACTIONS') == 'true',
+                 'Frozen local evidence is not the live cloud collection, even on the same date')
 class LocalEvidenceRegressionTests(unittest.TestCase):
     def test_20678_existing_rank_dates_remain_unchanged(self):
         path = ROOT / 'source-cache/base-refresh-20261029.json'
