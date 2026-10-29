@@ -17,10 +17,11 @@ jobs:
   refresh:
     if: github.repository == 'xm348190253/fund-panorama-wsy'
     runs-on: ubuntu-latest
-    timeout-minutes: 210
+    timeout-minutes: 350
     env:
       TZ: Asia/Shanghai
       PYTHONUNBUFFERED: '1'
+      FUND_HTTP_KEEPALIVE: '1'
     steps:
       - name: 取得代码
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -53,11 +54,11 @@ jobs:
           python scripts/modelscope_sync.py bootstrap --dist dist
           python scripts/guard_cloud_refresh.py --baseline baseline-coverage.json --capture
       - name: 全目录采集与校验（失败后同日断点重试一次）
-        timeout-minutes: 170
+        timeout-minutes: 300
         run: |
-          if ! python scripts/update_all.py --workers 8; then
+          if ! python scripts/update_all.py --workers 16; then
             echo 'Retrying the full pipeline using same-day checkpoints.'
-            python scripts/update_all.py --workers 8
+            python scripts/update_all.py --workers 16
           fi
           python scripts/guard_cloud_refresh.py --baseline baseline-coverage.json
       - name: 构建独立静态网页及版本清单

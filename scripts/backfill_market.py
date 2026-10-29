@@ -10,6 +10,7 @@ import argparse
 import bisect
 import calendar
 import concurrent.futures as cf
+from contextlib import contextmanager
 import datetime as dt
 import gzip
 import hashlib
@@ -21,6 +22,7 @@ import os
 from pathlib import Path
 import re
 import statistics
+import ssl
 import threading
 import time
 import urllib.error
@@ -31,6 +33,7 @@ from zoneinfo import ZoneInfo
 from inception_metadata import apply_inception, load_profiles, valid_date, calculation_input_hash
 
 ROOT = Path(__file__).resolve().parents[1]
+_HTTP_LOCAL = threading.local()
 TZ = ZoneInfo('Asia/Shanghai')
 SCHEMA = 5
 VARS = ('fS_code', 'fS_name', 'ishb', 'Data_netWorthTrend', 'Data_grandTotal',
@@ -280,12 +283,50 @@ def normalize(product, raw, evidence, as_of):
                         'aliasEvidence': raw.get('_aliasProof')}, 'sparkline': spark}
 
 
+@contextmanager
+def _open_gzip_response(request, timeout):
+    # Each worker owns one verified TLS connection. Reuse avoids a new DNS/TLS
+    # round trip for every code. Preserve urllib proxy behavior outside CI.
+    parsed = urllib.parse.urlsplit(request.full_url)
+    proxies = urllib.request.getproxies()
+    pooled = (os.environ.get('FUND_HTTP_KEEPALIVE') == '1'
+              and parsed.scheme == 'https' and parsed.hostname == 'fund.eastmoney.com'
+              and not any(proxies.get(key) for key in ('https', 'all')))
+    if not pooled:
+        with urllib.request.urlopen(request, timeout=timeout) as response:
+            yield response
+        return
+    conn = getattr(_HTTP_LOCAL, 'connection', None)
+    if conn is None:
+        conn = http.client.HTTPSConnection(parsed.hostname, timeout=timeout,
+                                           context=ssl.create_default_context())
+        _HTTP_LOCAL.connection = conn
+    try:
+        conn.timeout = timeout
+        if conn.sock is not None:
+            conn.sock.settimeout(timeout)
+        path = urllib.parse.urlunsplit(('', '', parsed.path, parsed.query, ''))
+        conn.request('GET', path, headers=dict(request.header_items()))
+        response = conn.getresponse()
+        try:
+            yield response
+        finally:
+            # An unread/oversized response must never poison the next request.
+            if not response.isclosed():
+                conn.close()
+            response.close()
+    except BaseException:
+        conn.close()
+        _HTTP_LOCAL.connection = None
+        raise
+
+
 def _download_full_gzip(url, timeout, max_bytes):
     # Range requests disable upstream gzip. Try one complete response first;
     # any transport/compression problem falls back to the original range path.
     req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0',
         'Referer': 'https://fund.eastmoney.com/', 'Accept-Encoding': 'gzip'})
-    with urllib.request.urlopen(req, timeout=timeout) as response:
+    with _open_gzip_response(req, timeout) as response:
         if response.status != 200 or response.headers.get('Content-Range') is not None:
             raise ValueError('compressed_response_is_not_complete')
         length = response.headers.get('Content-Length')

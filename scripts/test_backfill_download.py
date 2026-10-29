@@ -1,10 +1,11 @@
 """Bounded compressed download and compatibility checks without network access."""
 import gzip
 import io
+import os
 import unittest
 from unittest import mock
 
-from backfill_market import download
+from backfill_market import download, _HTTP_LOCAL
 
 FUND = 'https://fund.eastmoney.com/pingzhongdata/000001.js?v=test'
 PAYLOAD = b'var fS_code="000001";var Data_netWorthTrend=[];'
@@ -25,12 +26,23 @@ class Response:
     def __exit__(self, *_):
         return False
 
+    def isclosed(self):
+        return self.body.tell() == len(self.body.getvalue())
+
+    def close(self):
+        pass
+
 
 def identity(body=PAYLOAD):
     return Response(body, headers={'Content-Length': str(len(body))})
 
 
 class DownloadTests(unittest.TestCase):
+    def setUp(self):
+        self.environment = mock.patch.dict(os.environ, {'FUND_HTTP_KEEPALIVE': '0'})
+        self.environment.start()
+        self.addCleanup(self.environment.stop)
+
     def assert_fallback_headers(self, network):
         first, second = [call.args[0] for call in network.call_args_list[:2]]
         self.assertEqual(first.get_header('Accept-encoding'), 'gzip')
@@ -109,6 +121,41 @@ class DownloadTests(unittest.TestCase):
                 request = network.call_args.args[0]
                 self.assertEqual(request.get_header('Accept-encoding'), 'identity')
                 self.assertEqual(request.get_header('Range'), 'bytes=0-16777215')
+
+    def test_keepalive_reuses_one_verified_connection(self):
+        _HTTP_LOCAL.connection = None
+        connection = mock.Mock(sock=None)
+        connection.getresponse.side_effect = [identity(), identity()]
+        with mock.patch.dict(os.environ, {'FUND_HTTP_KEEPALIVE': '1'}), \
+                mock.patch('backfill_market.urllib.request.getproxies', return_value={}), \
+                mock.patch('backfill_market.http.client.HTTPSConnection', return_value=connection) as factory, \
+                mock.patch('backfill_market.ssl.create_default_context') as context:
+            self.assertEqual(download(FUND, 20), (PAYLOAD, 200, 1))
+            self.assertEqual(download(FUND, 20), (PAYLOAD, 200, 1))
+            factory.assert_called_once_with('fund.eastmoney.com', timeout=20, context=context.return_value)
+            self.assertEqual(connection.request.call_count, 2)
+            connection.close.assert_not_called()
+        _HTTP_LOCAL.connection = None
+
+    def test_keepalive_broken_connection_is_discarded_and_range_fallback_succeeds(self):
+        _HTTP_LOCAL.connection = None
+        connection = mock.Mock(sock=None)
+        connection.getresponse.side_effect = ConnectionResetError('server disconnected')
+        with mock.patch.dict(os.environ, {'FUND_HTTP_KEEPALIVE': '1'}), \
+                mock.patch('backfill_market.urllib.request.getproxies', return_value={}), \
+                mock.patch('backfill_market.http.client.HTTPSConnection', return_value=connection), \
+                mock.patch('backfill_market.urllib.request.urlopen', return_value=identity()):
+            self.assertEqual(download(FUND, 20), (PAYLOAD, 200, 2))
+            connection.close.assert_called()
+            self.assertIsNone(_HTTP_LOCAL.connection)
+
+    def test_keepalive_respects_configured_proxy(self):
+        with mock.patch.dict(os.environ, {'FUND_HTTP_KEEPALIVE': '1'}), \
+                mock.patch('backfill_market.urllib.request.getproxies', return_value={'https': 'http://proxy'}), \
+                mock.patch('backfill_market.http.client.HTTPSConnection') as factory, \
+                mock.patch('backfill_market.urllib.request.urlopen', return_value=identity()):
+            self.assertEqual(download(FUND, 20), (PAYLOAD, 200, 1))
+            factory.assert_not_called()
 
 
 if __name__ == '__main__':

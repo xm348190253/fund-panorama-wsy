@@ -9,7 +9,7 @@ from zoneinfo import ZoneInfo
 from package_local import snapshot_metadata
 
 ROOT = Path(__file__).resolve().parents[1]
-FIELDS = ('scale', 'manager', 'inception', 'dwjz', 'm1', 'y1', 'mdd')
+FIELDS = ('scale', 'manager', 'inceptionDate', 'dwjz', 'm1', 'y1', 'mdd', 'ytdMdd')
 
 
 def compact(meta):
