@@ -14,6 +14,11 @@ on:
         type: boolean
         default: true
         required: false
+      quotes_only:
+        description: '仅更新指数行情并发布（保留最近成功的基金数据快照）'
+        type: boolean
+        default: false
+        required: false
 
 permissions:
   contents: write
@@ -89,7 +94,7 @@ jobs:
           python scripts/modelscope_sync.py bootstrap --dist dist
           python scripts/guard_cloud_refresh.py --baseline baseline-coverage.json --capture
       - name: 全目录采集与校验（失败后同日断点重试一次）
-        if: steps.gate.outputs.proceed == 'true'
+        if: steps.gate.outputs.proceed == 'true' && inputs.quotes_only != true
         timeout-minutes: 300
         run: |
           collection_date="$(TZ=Asia/Shanghai date +%F)"
@@ -99,6 +104,12 @@ jobs:
             python scripts/update_all.py --workers 16
           fi
           python scripts/guard_cloud_refresh.py --baseline baseline-coverage.json --expected-date "$collection_date"
+      - name: 采集发布时可取得的最近指数行情
+        if: steps.gate.outputs.proceed == 'true'
+        run: |
+          python scripts/test_index_quotes.py
+          node scripts/test_index_ticker.cjs
+          python scripts/refresh_index_quotes.py --require-any
       - name: 构建独立静态网页及版本清单
         if: steps.gate.outputs.proceed == 'true'
         run: python scripts/build_cloud_site.py --output cloud-site --version "gh-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"

@@ -607,7 +607,16 @@ const referenceRenderTicker=renderTicker;
 renderTicker=function(){
   referenceRenderTicker();
   if(snapshotMode()){
-    const tail=document.getElementById('tickerTail');if(tail){tail.textContent='内网快照未内置指数行情';tail.classList.remove('warn','fail');}
+    const tail=document.getElementById('tickerTail');
+    if(tail){
+      const quoteSnapshot=window.__FUND_INDEX_SNAPSHOT__,available=DS.indexQuotes.filter(q=>q.val!=null).length;
+      tail.classList.remove('warn','fail');
+      if(!quoteSnapshot){tail.textContent='本版本未包含指数行情';tail.classList.add('warn');}
+      else{
+        tail.textContent='采集时最近行情 · 采集 '+quoteSnapshot.collectedAt.slice(0,19).replace('T',' ')+' 北京时间 · '+available+'/'+DS.indexQuotes.length+' 个指数';
+        if(available<DS.indexQuotes.length){tail.textContent+=' · 部分未取得';tail.classList.add(available?'warn':'fail');}
+      }
+    }
   }
 };
 function updateSourceUI(){
@@ -833,6 +842,7 @@ function detailDataDate(raw){
 window.__startApp=async function(){
   checkSnapshotCompleteness();if(snapshotMode())MARKET.sourceMode='内网快照';
   setProductsFromPool(SNAP.funds);DS.perfMap={...(SNAP.perf||{})};DS.pingzhongCache={...(SNAP.details||{})};DS.realtimeMap={...(SNAP.realtime||{})};
+  if(Array.isArray(window.__FUND_INDEX_SNAPSHOT__?.quotes))DS.indexQuotes=window.__FUND_INDEX_SNAPSHOT__.quotes.map(q=>({...q}));
   for(const [code,pf]of Object.entries(DS.perfMap))DS.perfMap[code]=enforceInceptionIntervals(sanitizeYear(pf),MARKET.byCode.get(code));
   for(const [code,raw]of Object.entries(DS.pingzhongCache))if(!(DS.perfMap[code]||{}).detailFetchedAt)applyDetail(code,{...raw,_fetchedAt:raw._fetchedAt||SNAP.meta.updatedAt});
   const cached=snapshotMode()?null:await Promise.race([readCache(),new Promise(resolve=>setTimeout(()=>resolve(null),1500))]);

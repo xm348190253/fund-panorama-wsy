@@ -7,6 +7,7 @@ import tempfile
 import unittest
 
 from build_cloud_site import build, fingerprint, owned_output
+from test_index_quotes import snapshot
 
 
 class CloudSiteTests(unittest.TestCase):
@@ -21,6 +22,8 @@ class CloudSiteTests(unittest.TestCase):
         if not self.node:
             self.skipTest('Node is required for JavaScript syntax validation')
         self.source(2)
+        (self.root / 'source-cache').mkdir()
+        (self.root / 'source-cache/index-quotes.json').write_text(json.dumps(snapshot()))
 
     def source(self, count):
         funds = [{'code': f'{i:06d}'} for i in range(1, count + 1)]
@@ -62,6 +65,10 @@ class CloudSiteTests(unittest.TestCase):
         self.assertIn('立即更新（管理员）', html)
         self.assertIn('if(anchor.href===', html)
         self.assertIn('刷新读取最新已成功发布版本', html)
+        self.assertIn('window.__FUND_INDEX_SNAPSHOT__=', html)
+        self.assertIn('2026-10-30T15:00:00+08:00', html)
+        self.assertEqual(release['indexQuotesAvailable'], 9)
+        self.assertEqual(release['indexQuotesCollectedAt'], '2026-10-30T17:55:00+08:00')
         self.assertEqual({p.name: fingerprint(p) for p in self.dist.iterdir()}, before)
 
     def test_owned_release_replaces_and_removes_old_shards(self):
@@ -103,6 +110,20 @@ class CloudSiteTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             build(self.root, self.output, 'test', self.node)
         self.assertEqual(list(elsewhere.iterdir()), [])
+
+    def test_missing_index_collection_never_silently_builds_without_quotes(self):
+        (self.root / 'source-cache/index-quotes.json').unlink()
+        with self.assertRaises(FileNotFoundError):
+            build(self.root, self.output, 'test', self.node)
+
+    def test_source_error_text_cannot_escape_the_embedded_script(self):
+        data = snapshot()
+        data['errors'] = ['</script><script>alert(1)</script>']
+        (self.root / 'source-cache/index-quotes.json').write_text(json.dumps(data))
+        build(self.root, self.output, 'test', self.node)
+        html = (self.output / 'index.html').read_text()
+        self.assertNotIn('</script><script>alert(1)', html)
+        self.assertIn('\\u003c/script>', html)
 
 
 if __name__ == '__main__':

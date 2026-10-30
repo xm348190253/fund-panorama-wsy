@@ -307,14 +307,16 @@ body{background-image:var(--page-grad);min-height:100vh;padding-bottom:60px;tran
 .ticker-items.is-marquee:hover{animation-play-state:paused}
 .ticker-marquee-gap{display:inline-block;width:36px;flex:0 0 36px}
 @keyframes ticker-marquee{0%{transform:translateX(0)}100%{transform:translateX(calc(-1 * var(--ticker-shift,0px)))}}
-.ticker-item{display:inline-flex;align-items:baseline;gap:6px;font-size:12px;flex-shrink:0;padding:0 4px}
+.ticker-item{display:inline-flex;flex-direction:column;align-items:flex-start;gap:3px;font-size:12px;flex-shrink:0;padding:0 4px}
+.ticker-quote-line{display:flex;align-items:baseline;gap:6px}
+.ticker-item-time{font-size:10px;color:var(--text-3);font-variant-numeric:tabular-nums}
 .ticker-item-name{color:var(--text-2)}
 .ticker-item-val{font-weight:600;font-variant-numeric:tabular-nums;color:var(--text-1)}
 .ticker-item-chg{font-size:11px;font-variant-numeric:tabular-nums;font-weight:500}
 .ticker-up{color:#FF5C5C}
 .ticker-down{color:#00C853}
 .ticker-flat{color:var(--text-3)}
-.ticker-tail{flex-shrink:0;font-size:10px;color:var(--text-4);padding-left:8px;border-left:1px solid var(--border-soft)}
+.ticker-tail{flex-shrink:0;max-width:260px;white-space:normal;font-size:10px;color:var(--text-4);padding-left:8px;border-left:1px solid var(--border-soft);line-height:1.6}
 .ticker-tail.warn{color:var(--gold)}
 .ticker-tail.fail{color:var(--red)}
 
@@ -1160,9 +1162,9 @@ function loadAllPerformance(){}
 
 // ③ 指数行情：东方财富 push2 接口（与天天基金同源，天天基金首页指数 ticker 用的就是这个）
 //    URL: https://push2delay.eastmoney.com/api/qt/ulist.np/get?secids=...&fields=...&cb=jsonp_xxx
-//    返回: jsonp_xxx({"rc":0,"data":{"diff":[{f2,f3,f4,f12,f14,f80,f86,f124},...]}})
+//    返回: jsonp_xxx({"rc":0,"data":{"diff":[{f2,f3,f4,f12,f14,f124},...]}})
 //    secid 前缀：1=上交所，0=深交所，100/124=港股 / 海外指数
-//    字段：f2=最新价，f3=涨跌幅%，f4=涨跌额，f12=代码，f14=名称，f80/f86/f124=行情日期/时间
+//    字段：f2=最新价，f3=涨跌幅%，f4=涨跌额，f12=代码，f14=名称，f124=行情时间戳
 const INDEX_SYMBOLS = [
   {secid:'1.000001',  name:'上证指数',   market:'CN'},
   {secid:'1.000300',  name:'沪深300',    market:'CN'},
@@ -1171,7 +1173,7 @@ const INDEX_SYMBOLS = [
   {secid:'100.HSI',   name:'恒生指数',   market:'HK'},
   {secid:'124.HSTECH',name:'恒生科技',   market:'HK'},
   {secid:'100.SPX',   name:'标普500',    market:'US'},
-  {secid:'100.NDX',   name:'纳斯达克',   market:'US'},
+  {secid:'100.NDX',   name:'纳斯达克100',market:'US'},
   {secid:'100.DJIA',  name:'道琼斯指数', market:'US'}
 ];
 
@@ -1250,9 +1252,9 @@ function parseEpoch(raw){
 }
 function parseEastmoneyQuoteTime(it){
   const from124 = parseEpoch(it && it.f124);
-  const from86 = parseEpoch(it && it.f86);
-  const quoteDate = parseYmd(it && it.f80) || (from124 && from124.date) || (from86 && from86.date);
-  const quoteTime = (from124 && from124.time) || (from86 && from86.time) || null;
+  // On ulist.np/get only f124 is a quote epoch; f80/f86 are unrelated numeric fields.
+  const quoteDate = from124 && from124.date;
+  const quoteTime = from124 && from124.time;
   return {quoteDate, quoteTime};
 }
 function formatQuoteStamp(q){
@@ -1289,7 +1291,7 @@ async function loadIndexQuotes(){
   const cbName = 'jQuery1124'+Math.floor(Math.random()*1e16)+'_'+Date.now();
   const url = 'https://push2delay.eastmoney.com/api/qt/ulist.np/get'
     + '?fltt=2&invt=2&ut=b2884a393a59ad64002292a3e90d46a5'
-    + '&fields=f2,f3,f4,f12,f14,f80,f86,f124,f104,f105,f106'
+    + '&fields=f2,f3,f4,f12,f14,f124,f104,f105,f106'
     + '&secids='+symbols.map(s=>s.secid).join(',')
     + '&cb='+cbName+'&_='+Date.now();
   try{
@@ -1367,14 +1369,18 @@ function renderTicker(){
     return;
   }
   const html = items.map(q=>{
-    if(q.val==null) return '<span class="ticker-item ticker-flat"><span class="ticker-item-name">'+escapeHtml(q.name)+'</span><span class="ticker-item-val">--</span></span>';
+    const quoteStamp=formatQuoteStamp(q);
+    const timeText=q.val==null?'本次未取得行情':quoteStamp?'行情 '+quoteStamp+' 北京时间':'行情时间：来源未披露';
+    const timeHtml='<span class="ticker-item-time">'+escapeHtml(timeText)+'</span>';
+    if(q.val==null) return '<span class="ticker-item ticker-flat"><span class="ticker-quote-line"><span class="ticker-item-name">'+escapeHtml(q.name)+'</span><span class="ticker-item-val">--</span></span>'+timeHtml+'</span>';
     const cls = q.pct>0 ? 'ticker-up' : q.pct<0 ? 'ticker-down' : 'ticker-flat';
     const sign = q.pct>0?'+':'';
     const pctText = q.pct==null ? '' : '<span class="ticker-item-chg">'+sign+q.pct.toFixed(2)+'%</span>';
     return '<span class="ticker-item '+cls+'">'+
+      '<span class="ticker-quote-line">'+
       '<span class="ticker-item-name">'+escapeHtml(q.name)+'</span>'+
       '<span class="ticker-item-val">'+q.val.toFixed(2)+'</span>'+
-      pctText+'</span>';
+      pctText+'</span>'+timeHtml+'</span>';
   }).join('');
   wrap.dataset.baseHtml = html;
   wrap.innerHTML = html;

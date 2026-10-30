@@ -13,6 +13,7 @@ from zoneinfo import ZoneInfo
 
 from package_intranet import validate_site
 from package_local import restricted_html, snapshot_metadata
+from refresh_index_quotes import validate_snapshot
 
 ROOT = Path(__file__).resolve().parents[1]
 ASSET = re.compile(r'(?:index\.html|market\.js|echarts\.min\.js|snapshot(?:-perf-\d{3})?\.js)')
@@ -93,6 +94,7 @@ def build(root, output, version, node='node'):
     data_date = (meta.get('collection') or {}).get('asOf')
     if not isinstance(data_date, str) or dt.date.fromisoformat(data_date).isoformat() != data_date:
         raise ValueError('Snapshot collection date must be an ISO date')
+    index_snapshot = validate_snapshot(json.loads((root / 'source-cache/index-quotes.json').read_text()))
     dist = root / 'dist'
     names = ['index.html', 'market.js', 'echarts.min.js', 'snapshot.js'] + sorted(
         path.name for path in dist.glob('snapshot-perf-*.js'))
@@ -110,6 +112,12 @@ def build(root, output, version, node='node'):
         index = stage / 'index.html'
         html = restricted_html(index.read_text(), meta, same_origin_assets=True)
         html = html.replace('内网快照', '云端快照').replace('"mode": "intranet"', '"mode": "cloud_snapshot"')
+        # Embed the quote snapshot inside the hashed HTML; both hosted entries use this exact asset.
+        quote_json = json.dumps(index_snapshot, ensure_ascii=False, separators=(',', ':'), allow_nan=False).replace('<', '\\u003c')
+        marker = '<script src="market.js"></script>'
+        if html.count(marker) != 1:
+            raise ValueError('Index snapshot bootstrap position is missing or ambiguous')
+        html = html.replace(marker, '<script>window.__FUND_INDEX_SNAPSHOT__=' + quote_json + ';</script>\n' + marker)
         # Permit only the fixed administrator entry; all fund source links stay citations.
         html = html.replace("  event.preventDefault();event.stopImmediatePropagation();",
                             "  if(anchor.href===" + json.dumps(ADMIN_URL) + ")return;\n"
@@ -137,6 +145,8 @@ def build(root, output, version, node='node'):
             raise ValueError('A static asset reaches the 25 MiB per-file limit')
         release = {'version': version, 'dataDate': data_date,
                    'generatedAt': dt.datetime.now(ZoneInfo('Asia/Shanghai')).isoformat(timespec='seconds'),
+                   'indexQuotesCollectedAt': index_snapshot['collectedAt'],
+                   'indexQuotesAvailable': sum(q['val'] is not None for q in index_snapshot['quotes']),
                    'files': files}
         (stage / MANIFEST).write_text(json.dumps(release, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
         owned_output(stage)
