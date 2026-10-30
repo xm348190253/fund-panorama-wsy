@@ -18,6 +18,7 @@ ROOT = Path(__file__).resolve().parents[1]
 ASSET = re.compile(r'(?:index\.html|market\.js|echarts\.min\.js|snapshot(?:-perf-\d{3})?\.js)')
 MANIFEST = 'release.json'
 MAX_ASSET_BYTES = 25 * 1024 * 1024
+ADMIN_URL = 'https://github.com/xm348190253/fund-panorama-wsy/actions/workflows/daily-modelscope.yml'
 
 
 def fingerprint(path):
@@ -109,8 +110,17 @@ def build(root, output, version, node='node'):
         index = stage / 'index.html'
         html = restricted_html(index.read_text(), meta, same_origin_assets=True)
         html = html.replace('内网快照', '云端快照').replace('"mode": "intranet"', '"mode": "cloud_snapshot"')
+        # Permit only the fixed administrator entry; all fund source links stay citations.
+        html = html.replace("  event.preventDefault();event.stopImmediatePropagation();",
+                            "  if(anchor.href===" + json.dumps(ADMIN_URL) + ")return;\n"
+                            "  event.preventDefault();event.stopImmediatePropagation();", 1)
+        notice = ('<br>共用云端版本 ' + version
+                  + ' · 每天北京时间 08:00 计划开始采集，错峰补偿；刷新读取最新已成功发布版本。'
+                  + '<br><a style="color:#b9e6ff;text-decoration:underline" target="_blank" rel="noopener noreferrer" href="'
+                  + ADMIN_URL + '">立即更新（管理员）／查看更新进度</a>'
+                  + ' · 管理员登录 GitHub 后点击 Run workflow；普通访问只读。')
         html, count = re.subn(r'(<div id="deliveryBanner" role="status">[^<]*)(</div>)',
-                             r'\1<br>每天北京时间 08:00 由云端开始采集；刷新读取最新已成功发布版本。\2', html)
+                             lambda m: m[1] + notice + m[2], html)
         if count != 1:
             raise ValueError('Cloud update notice could not be placed in the snapshot banner')
         index.write_text(html, encoding='utf-8')

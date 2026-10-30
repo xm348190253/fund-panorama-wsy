@@ -57,7 +57,10 @@ class CloudSiteTests(unittest.TestCase):
             self.assertEqual(fingerprint(self.output / name), expected)
         html = (self.output / 'index.html').read_text()
         self.assertIn('数据快照 2026-10-29', html)
-        self.assertIn('每天北京时间 08:00 由云端开始采集', html)
+        self.assertIn('每天北京时间 08:00 计划开始采集', html)
+        self.assertIn('共用云端版本 test-1', html)
+        self.assertIn('立即更新（管理员）', html)
+        self.assertIn('if(anchor.href===', html)
         self.assertIn('刷新读取最新已成功发布版本', html)
         self.assertEqual({p.name: fingerprint(p) for p in self.dist.iterdir()}, before)
 

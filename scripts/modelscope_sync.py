@@ -319,7 +319,7 @@ def publish(args, token):
     atomic_json(args.receipt, receipt)
     try:
         release, hashes = validate_site(args.site)
-        receipt.update(version=release['version'], assetCount=len(hashes))
+        receipt.update(version=release['version'], dataDate=release.get('dataDate'), assetCount=len(hashes))
         client = Client(args.repo, token)
         info = client.api()
         client.verify_configuration(info)
