@@ -10,7 +10,7 @@ import urllib.request
 from zoneinfo import ZoneInfo
 
 TZ = ZoneInfo('Asia/Shanghai')
-INDEX_HOURS = (10, 12, 14)
+INDEX_HOURS = (10, 12, 14, 16)
 
 
 def already_updated(receipt, today, force=False):

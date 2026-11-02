@@ -13,13 +13,13 @@ class RefreshGateTests(unittest.TestCase):
                              dt.datetime.fromisoformat('2026-11-02T' + clock + '+08:00'), **kwargs)[:2]
 
     def test_each_intraday_slot_runs_despite_daily_fund_success(self):
-        for clock, previous in [('10:00:00', '09:06:00'), ('12:00:00', '10:00:30'), ('14:00:00', '12:00:30')]:
+        for clock, previous in [('10:00:00', '09:06:00'), ('12:00:00', '10:00:30'), ('14:00:00', '12:00:30'), ('16:00:00', '14:00:30')]:
             with self.subTest(clock=clock):
                 self.assertEqual(self.choose(clock, self.receipt('2026-11-02T' + previous + '+08:00')), (True, True))
 
     def test_duplicate_triggers_and_evening_retries_skip_completed_slot(self):
         for clock, collected in [('10:00:00', '10:00:00'), ('11:59:59', '10:01:00'),
-                                 ('13:59:59', '12:01:00'), ('23:59:59', '14:01:00')]:
+                                 ('13:59:59', '12:01:00'), ('15:59:59', '14:01:00'), ('16:07:00', '16:01:00'), ('23:59:59', '16:01:00')]:
             self.assertEqual(self.choose(clock, self.receipt('2026-11-02T' + collected + '+08:00')), (False, True))
 
     def test_publication_after_boundary_does_not_hide_old_collection(self):
@@ -28,11 +28,12 @@ class RefreshGateTests(unittest.TestCase):
 
     def test_delayed_trigger_catches_up_latest_slot_only(self):
         self.assertEqual(self.choose('14:43:00'), (True, True))
-        self.assertEqual(self.choose('16:17:00', self.receipt('2026-11-02T14:43:10+08:00')), (False, True))
+        self.assertEqual(self.choose('15:17:00', self.receipt('2026-11-02T14:43:10+08:00')), (False, True))
+        self.assertEqual(self.choose('16:17:00', self.receipt('2026-11-02T14:43:10+08:00')), (True, True))
 
     def test_daily_funds_still_refresh_when_yesterday_finished_today(self):
         receipt = dict(self.receipt(), dataDate='2026-11-01')
-        for clock in ('08:00:00', '10:00:00', '14:00:00'):
+        for clock in ('08:00:00', '10:00:00', '14:00:00', '16:00:00'):
             self.assertEqual(self.choose(clock, receipt), (True, False))
 
     def test_automatic_does_not_start_before_eight(self):

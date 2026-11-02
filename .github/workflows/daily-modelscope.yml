@@ -4,8 +4,8 @@ on:
   schedule:
     # UTC 00:00 = Asia/Shanghai 08:00. GitHub may delay scheduled jobs.
     - cron: '0 0 * * *'
-    # Beijing 10:00, 12:00, 14:00: index-only refresh after daily funds succeed.
-    - cron: '0 2,4,6 * * *'
+    # Beijing 10:00, 12:00, 14:00, 16:00: index-only refresh after daily funds succeed.
+    - cron: '0 2,4,6,8 * * *'
     # Off-peak retries: Beijing 08:00-23:59, at minutes 7, 17 and 43.
     # Retry missing daily funds or the latest due index slot; otherwise no-op.
     - cron: '7,17,43 0-15 * * *'
