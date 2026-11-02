@@ -24,7 +24,9 @@ class ModelScopeSyncTests(unittest.TestCase):
         names = sync.REQUIRED_ASSETS | {'snapshot-perf-001.js'}
         for name in names:
             (self.site / name).write_bytes(('fixture:' + name).encode())
-        self.release = {'version': '20261029-run-123-1', 'files': {
+        self.release = {'version': '20261029-run-123-1',
+                        'indexQuotesCollectedAt': '2026-11-02T10:01:00+08:00', 'indexQuotesAvailable': 9,
+                        'files': {
             name: {'sha256': sync.digest((self.site / name).read_bytes())} for name in sorted(names)}}
         self.write_release()
         self.info = {'id': sync.DEFAULT_REPO, 'sdk_type': 'static',
@@ -261,6 +263,8 @@ class ModelScopeSyncTests(unittest.TestCase):
         receipt = json.loads(args.receipt.read_text())
         self.assertEqual(receipt['status'], 'success')
         self.assertTrue(receipt['verified'])
+        self.assertEqual(receipt['indexQuotesCollectedAt'], '2026-11-02T10:01:00+08:00')
+        self.assertEqual(receipt['indexQuotesAvailable'], 9)
         self.assertTrue(receipt['pushed'])
         self.assertTrue(receipt['deployRequested'])
         self.assertIn(('push', 'origin', 'HEAD:master'), [call.args for call in checkout.git.call_args_list])
