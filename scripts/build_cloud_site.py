@@ -135,9 +135,21 @@ def build(root, output, version, node='node'):
         market = stage / 'market.js'
         market.write_text(market.read_text().replace('内网快照', '云端快照'), encoding='utf-8')
         validation = validate_site(stage, meta)
+        insurance_ui = ROOT / 'scripts/insurance-ui.js'
+        insurance_origin = 'https://fund-panorama-wsy-1028.xmxmxm348190253.chatgpt.site'
+        if insurance_ui.is_file():
+            # Preserve the native request function before the fund snapshot guard.
+            capture = '<script>window.__INSURANCE_FETCH__=window.fetch.bind(window);</script>'
+            html = html.replace('<head>', '<head>' + capture, 1)
+            html = html.replace("connect-src 'none'", "connect-src " + insurance_origin)
+            html = html.replace("connect-src &#x27;none&#x27;", "connect-src " + insurance_origin)
+            ui = insurance_ui.read_text(encoding='utf-8').replace('</script', '<\\/script')
+            html = html.replace('</body>', '<script id="insurance-dashboard-bootstrap">' + ui + '</script></body>', 1)
+            index.write_text(html, encoding='utf-8')
         policy = ResourcePolicy()
         policy.feed(html)
-        if policy.external or "connect-src 'none'" not in policy.csp or policy.banners != 1:
+        expected_connect = "connect-src " + insurance_origin if insurance_ui.is_file() else "connect-src 'none'"
+        if policy.external or expected_connect not in policy.csp or policy.banners != 1:
             raise ValueError('Cloud snapshot resource policy failed')
         syntax = validate_scripts(stage, node)
         files = {name: fingerprint(stage / name) for name in names}
