@@ -7,7 +7,7 @@
   const root=host.attachShadow({mode:'open'}),state={market:'insurance',page:new URLSearchParams(location.search).has('admin')?'upload':'analytics',module:'market',meta:null,data:null,cache:{},report:null,reportMonth:null,category:'',manager:'',search:'',sort:'size',pageNo:1,admin:false};
   const esc=s=>String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
   const fmt=(n,d=2)=>n===null||n===undefined?'待补':Number(n).toLocaleString('zh-CN',{minimumFractionDigits:d,maximumFractionDigits:d}),pct=n=>n===null||n===undefined?'待补':fmt(n*100)+'%',cats=['固定收益类（非货币类）','混合类','权益类','固定收益（货币类）'],colors=['#45c9c3','#70a6ee','#e4b16b','#ac9ad9'];
-  const monthName=m=>m?.replace('-','年')+'月',download=(name,version)=>CLOUD+'/api/insurance/download/'+name+(version?'?version='+encodeURIComponent(version):'');
+  const monthName=m=>m?.replace('-','年')+'月',download=(name,version)=>localFund&&snapshotManifest&&(!version||version===snapshotManifest.version)&&snapshotManifest.files[name]?location.origin+'/insurance-data/'+snapshotManifest.version+'/'+name:CLOUD+'/api/insurance/download/'+name+(version?'?version='+encodeURIComponent(version):'');
   const $=s=>root.querySelector(s),$$=s=>[...root.querySelectorAll(s)],numeric=(v,d=2)=>'<span class="'+(v<0?'down':v>0?'up':'')+'">'+fmt(v,d)+'</span>';
   root.innerHTML='<style>'+CSS+'</style><div class="am-shell"><header class="am-top"><div class="am-brand"><div class="am-mark">资</div><div><div class="eyebrow">ASSET MANAGEMENT · MARKET INTELLIGENCE</div><strong>资管市场竞品看板</strong></div></div><div class="top-actions"><span class="top-status live-dot" id="top-status">正在读取云端资料</span><button id="theme" aria-label="切换深浅主题">浅色模式</button><button class="admin-top" id="top-upload">资料上传 ↗</button></div></header><nav class="market-tabs" aria-label="市场"><button data-market="insurance" class="active">保险资管</button><button data-market="funds">公募基金</button></nav><div id="insurance-layout" class="am-layout"><aside class="am-side"><div class="side-label">保险资产管理</div><button data-page="analytics" class="active">◫　数据分析</button><button data-page="reports">▤　月报中心</button><button data-page="upload">↥　资料上传</button><div class="side-note">以原报告月份为准<br>保留历史资料与版本<br>Word · Excel 一键导出</div></aside><main class="am-content" id="content"><div class="loading"><span class="spinner"></span>正在读取最新资料…</div></main></div><section id="funds-wrap" hidden><slot name="funds"></slot></section></div>';
   if(localFund){const wrap=document.createElement('div');wrap.slot='funds';for(const el of old)if(el!==host)wrap.append(el);host.append(wrap);}
@@ -153,7 +153,7 @@
   function reports(){
     const options=[...state.meta.months].reverse().map(m=>'<option value="'+m+'"'+(m===state.reportMonth?' selected':'')+'>'+monthName(m)+(m===state.meta.latest?' · 最新':'')+'</option>').join('');
     return title('保险资管 · 月报中心','按报告实际月份归档；上传新月份后自动加入列表')+
-      '<div class="panel report-controls"><label for="report-month">选择月份</label><select id="report-month">'+options+'</select><a class="am-btn primary" id="report-bundle" href="'+download('report-'+state.reportMonth+'.zip')+'" target="_blank" rel="noopener">一键导出 Word＋Excel</a><a class="am-btn" id="report-word" href="'+download('report-'+state.reportMonth+'.docx')+'" target="_blank" rel="noopener">Word</a><a class="am-btn" id="report-excel" href="'+download('report-'+state.reportMonth+'.xlsx')+'" target="_blank" rel="noopener">Excel 明细</a><span class="subtle">下载将在新窗口打开，首次需登录看板所有者账号。</span></div><div id="report-body"><div class="loading"><span class="spinner"></span>正在读取本期月报…</div></div>';
+      '<div class="panel report-controls"><label for="report-month">选择月份</label><select id="report-month">'+options+'</select><a class="am-btn primary" id="report-bundle" href="'+download('report-'+state.reportMonth+'.zip')+'" target="_blank" rel="noopener">一键导出 Word＋Excel</a><a class="am-btn" id="report-word" href="'+download('report-'+state.reportMonth+'.docx')+'" target="_blank" rel="noopener">Word</a><a class="am-btn" id="report-excel" href="'+download('report-'+state.reportMonth+'.xlsx')+'" target="_blank" rel="noopener">Excel 明细</a><span class="subtle">直接下载，无需登录。</span></div><div id="report-body"><div class="loading"><span class="spinner"></span>正在读取本期月报…</div></div>';
   }
   async function loadReport(){
     const wanted=state.reportMonth;
@@ -170,11 +170,10 @@
       panel('历史更新版本',history(),state.meta.sourceFiles+'份有效原报告 · '+state.meta.productRows+'条产品历史记录')+'</div>';
   }
   async function loadAdmin(){
-    if(localFund){$('#upload-control').innerHTML='<h2>云端资料管理</h2><p class="subtle">使用看板所有者账号登录后上传。云端生成后，魔搭每15分钟检查更新；本页最近成功同步：'+esc(state.meta.mirrorSyncedAt?new Date(state.meta.mirrorSyncedAt).toLocaleString('zh-CN',{timeZone:'Asia/Shanghai'}):'待确认')+'。</p><a class="am-btn primary" href="'+CLOUD+'/?admin=1" target="_blank" rel="noopener">进入云端上传管理 ↗</a>';return;}
+    if(localFund){$('#upload-control').innerHTML='<h2>上传本月资料</h2><p class="subtle">任何人均可上传，无需登录。请选择同月份的组合行情和开放式产品业绩两份DOCX报告；通过格式与内容校验后自动更新。云端生成后，魔搭每15分钟检查更新，遇公募发布任务时顺延；本页最近成功同步：'+esc(state.meta.mirrorSyncedAt?new Date(state.meta.mirrorSyncedAt).toLocaleString('zh-CN',{timeZone:'Asia/Shanghai'}):'待确认')+'。</p><a class="am-btn primary" href="'+CLOUD+'/?admin=1" target="_blank" rel="noopener">进入资料上传 ↗</a>';return;}
     try{
       const a=await api('/admin');state.admin=a.admin;
-      if(!a.admin){$('#upload-control').innerHTML='<h2>登录后上传资料</h2><p class="subtle">看板浏览无需登录。上传与策略标签确认限看板所有者账号操作。</p><a class="am-btn primary" href="'+a.signin+'" target="_top">使用 ChatGPT 账号登录</a>';return;}
-      $('#upload-control').innerHTML='<h2>上传本月资料</h2><form id="upload-form"><div class="upload-box"><label for="overview-file">① 保险资产管理产品行业报告（YYYY-MM）-组合行情.docx</label><input type="file" id="overview-file" name="overview" accept=".docx" required><label for="products-file">② 保险资产管理产品行业报告（YYYY-MM）-组合行情-开放式组合类资管产品业绩.docx</label><input type="file" id="products-file" name="products" accept=".docx" required><div class="subtle">每份不超过10MB。文件名月份须与正文一致。</div></div><button class="primary" id="upload-submit" type="submit">上传并自动更新</button><div id="upload-state" role="status" aria-live="polite"></div></form><div id="strategy-admin"></div>';
+      $('#upload-control').innerHTML='<h2>上传本月资料</h2><p class="subtle">任何人均可上传，无需登录。请选择同月份的两份原始报告，校验通过后自动更新。</p><form id="upload-form"><div class="upload-box"><label for="overview-file">① 保险资产管理产品行业报告（YYYY-MM）-组合行情.docx</label><input type="file" id="overview-file" name="overview" accept=".docx" required><label for="products-file">② 保险资产管理产品行业报告（YYYY-MM）-组合行情-开放式组合类资管产品业绩.docx</label><input type="file" id="products-file" name="products" accept=".docx" required><div class="subtle">每份不超过10MB。文件名月份须与正文一致。</div></div><button class="primary" id="upload-submit" type="submit">上传并自动更新</button><div id="upload-state" role="status" aria-live="polite"></div></form><div id="strategy-admin"></div>';
       $('#upload-form').onsubmit=async e=>{
         e.preventDefault();const f1=$('#overview-file').files[0],f2=$('#products-file').files[0];if(!f1||!f2)return;
         const status=$('#upload-state'),button=$('#upload-submit'),form=new FormData();form.append('files',f1);form.append('files',f2);
@@ -184,7 +183,7 @@
         }catch(err){status.className='upload-state error';status.textContent=err.message+'\n此次更新未发布，当前版本继续保留。';}
         finally{button.disabled=false;}
       };
-      renderStrategies();
+      if(state.admin)renderStrategies();
     }catch(e){$('#upload-control').innerHTML='<div class="empty">'+esc(e.message)+'</div>';}
   }
   function renderStrategies(){

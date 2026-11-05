@@ -264,7 +264,7 @@ class StudioCheckout:
                 valid = (name == 'insurance-data/manifest.json' or
                          (len(parts) == 3 and parts[0] == 'insurance-data'
                           and INSURANCE_VERSION.fullmatch(parts[1])
-                          and (parts[2] == 'meta.json' or re.fullmatch(r'period-20\d{2}-(?:0[1-9]|1[0-2])\.json', parts[2]))))
+                          and (parts[2] in {'meta.json', 'database.xlsx'} or re.fullmatch(r'(?:period-20\d{2}-(?:0[1-9]|1[0-2])\.json|report-20\d{2}-(?:0[1-9]|1[0-2])\.(?:docx|xlsx|zip))', parts[2]))))
                 if not valid:
                     raise SyncError('Unowned nested asset: ' + name)
                 for parent in target.parents:

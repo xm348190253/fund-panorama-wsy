@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Mirror only the public insurance JSON views; never request private files.
+"""Mirror public insurance views and the user-authorized public report exports.
 
 Immutable version files are written first, the checksum manifest last. Versions
 already on the Studio remain available to pages opened before the next update.
@@ -13,6 +13,7 @@ import os
 from pathlib import Path
 import re
 import tempfile
+from concurrent.futures import ThreadPoolExecutor
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -29,7 +30,7 @@ def fingerprint(raw):
     return {'bytes': len(raw), 'sha256': hashlib.sha256(raw).hexdigest()}
 
 
-def public_json(url, limit=LIMIT):
+def public_bytes(url, limit=LIMIT):
     # The upstream edge rejects Python's default user agent (Cloudflare 1010).
     # These are anonymous, read-only endpoints: no cookies or credentials.
     request = urllib.request.Request(url, headers={
@@ -46,6 +47,11 @@ def public_json(url, limit=LIMIT):
                 raw = stream.read(limit + 1)
     if len(raw) > limit:
         raise ValueError('Insurance JSON exceeds size limit')
+    return raw
+
+
+def public_json(url, limit=LIMIT):
+    raw = public_bytes(url, limit)
     value = json.loads(raw)
     if not isinstance(value, dict):
         raise ValueError('Insurance JSON must be an object')
@@ -64,7 +70,11 @@ def validate_meta(meta):
 
 
 def names_for(meta):
-    return {'meta.json'} | {'period-' + month + '.json' for month in meta['months']}
+    names = {'meta.json'} | {'period-' + month + '.json' for month in meta['months']}
+    if meta.get('schema', 1) >= 2:
+        names |= {'database.xlsx'} | {'report-' + month + '.' + ext
+                 for month in meta['months'] for ext in ('docx', 'xlsx', 'zip')}
+    return names
 
 
 def validate_manifest(manifest):
@@ -105,18 +115,32 @@ def validate_snapshot(root):
         raw = safe_file(root, relative).read_bytes()
         if fingerprint(raw) != spec:
             raise ValueError('Insurance snapshot checksum mismatch: ' + name)
-        value = json.loads(raw)
-        if name == 'meta.json':
+        if not name.endswith('.json'):
+            validate_download(name, raw)
+        elif name == 'meta.json':
+            value = json.loads(raw)
             validate_meta(value)
             if any(value.get(k) != manifest.get(k) for k in ('version', 'latest', 'months', 'updated')):
                 raise ValueError('Insurance metadata differs from manifest')
-        elif value.get('month') != name[7:-5]:
+        elif json.loads(raw).get('month') != name[7:-5]:
             raise ValueError('Insurance report month mismatch')
         hashes['insurance-data/' + relative] = spec['sha256']
     return manifest, hashes
 
 
-def build_snapshot(root, fetch=public_json):
+def validate_download(name, raw):
+    import io
+    import zipfile
+    with zipfile.ZipFile(io.BytesIO(raw)) as archive:
+        entries = archive.namelist()
+        if name.endswith('.zip'):
+            if len(entries) != 2 or not any(n.endswith('.docx') for n in entries) or not any(n.endswith('.xlsx') for n in entries):
+                raise ValueError('Report bundle must contain one Word and one Excel')
+        elif '[Content_Types].xml' not in entries:
+            raise ValueError('Report download is not a valid Office file')
+
+
+def build_snapshot(root, fetch=public_json, download=public_bytes):
     root = Path(root)
     if root.is_symlink():
         raise ValueError('Insurance output cannot be a symlink')
@@ -132,6 +156,14 @@ def build_snapshot(root, fetch=public_json):
             raise ValueError('Insurance source returned a different month')
         content['period-' + month + '.json'] = raw
     manifest = {key: meta[key] for key in ('version', 'latest', 'months', 'updated')}
+    manifest['schema'] = 2
+    download_names = sorted(names_for(manifest) - set(content))
+    def fetch_download(name):
+        raw = download(ORIGIN + '/api/insurance/download/' + name + '?version=' + meta['version'])
+        validate_download(name, raw)
+        return name, raw
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        content.update(pool.map(fetch_download, download_names))
     manifest.update(syncedAt=dt.datetime.now(dt.timezone.utc).isoformat(),
                     files={name: fingerprint(raw) for name, raw in content.items()})
     validate_manifest(manifest)
@@ -145,9 +177,10 @@ def build_snapshot(root, fetch=public_json):
     if manifest_path.exists():
         previous, _ = validate_snapshot(root)
         if previous['version'] == manifest['version']:
-            if previous['files'] != manifest['files']:
+            if any(manifest['files'].get(name) != info for name, info in previous['files'].items()):
                 raise ValueError('An immutable insurance manifest changed')
-            return previous
+            if previous['files'] == manifest['files']:
+                return previous
     with tempfile.TemporaryDirectory(prefix='.insurance-stage-', dir=root.parent) as temporary:
         stage = Path(temporary)
         for name, raw in content.items():
@@ -174,7 +207,7 @@ def needs_sync(fetch=public_json):
             return True
         raise
     validate_manifest(mirrored)
-    return any(mirrored.get(key) != source.get(key) for key in ('version', 'months', 'latest', 'updated'))
+    return mirrored.get('schema', 1) < 2 or any(mirrored.get(key) != source.get(key) for key in ('version', 'months', 'latest', 'updated'))
 
 
 def main():
