@@ -1,0 +1,64 @@
+name: 同步保险资管公开看板数据
+
+on:
+  schedule:
+    # Check every 15 minutes. GitHub may delay scheduled runs; publication uses
+    # the existing Studio lock and waits for any fund publication to finish.
+    - cron: '8,23,38,53 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  check:
+    if: github.repository == 'xm348190253/fund-panorama-wsy' && github.event.repository.visibility == 'public'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      changed: ${{ steps.check.outputs.changed }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: 无发布任务运行时检查保险版本
+        id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python - <<'PY'
+          import json, os, subprocess, urllib.request
+          repo = os.environ['GITHUB_REPOSITORY']
+          request = urllib.request.Request('https://api.github.com/repos/' + repo + '/actions/runs?status=in_progress&per_page=100', headers={'Authorization': 'Bearer ' + os.environ['GH_TOKEN'], 'Accept': 'application/vnd.github+json'})
+          with urllib.request.urlopen(request, timeout=30) as response:
+              runs = json.load(response)['workflow_runs']
+          own = os.environ['GITHUB_RUN_ID']
+          paths = {'.github/workflows/daily-modelscope.yml', '.github/workflows/publish-dashboard.yml', '.github/workflows/sync-insurance.yml'}
+          busy = any(str(r['id']) != own and r.get('path') in paths for r in runs)
+          if busy:
+              with open(os.environ['GITHUB_OUTPUT'], 'a') as out:
+                  out.write('changed=false\n')
+              print('A publication is already running; check again at the next scheduled run.')
+          else:
+              subprocess.run(['python', 'scripts/insurance_snapshot.py', '--check'], check=True)
+          PY
+  publish:
+    needs: check
+    if: needs.check.outputs.changed == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    concurrency:
+      group: modelscope-production
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: 同步公开分析数据并核验已发布版本
+        env:
+          MODELSCOPE_API_KEY: ${{ secrets.MODELSCOPE_API_KEY }}
+        run: python scripts/modelscope_sync.py sync-insurance --receipt insurance-sync-receipt.json
+      - name: 保存同步回执
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: insurance-sync-receipt
+          path: insurance-sync-receipt.json
+          if-no-files-found: ignore

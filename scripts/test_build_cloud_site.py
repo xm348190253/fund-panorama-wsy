@@ -6,7 +6,7 @@ import subprocess
 import tempfile
 import unittest
 
-from build_cloud_site import build, fingerprint, owned_output
+from build_cloud_site import build, fingerprint, owned_output, ResourcePolicy
 from test_index_quotes import snapshot
 
 
@@ -66,6 +66,11 @@ class CloudSiteTests(unittest.TestCase):
         self.assertIn('if(anchor.href===', html)
         self.assertIn('刷新读取最新已成功发布版本', html)
         self.assertIn('window.__FUND_INDEX_SNAPSHOT__=', html)
+        policy = ResourcePolicy()
+        policy.feed(html)
+        self.assertIn("connect-src 'self'", policy.csp)
+        self.assertNotIn('connect-src https://fund-panorama', policy.csp)
+        self.assertNotIn('insurance-data/manifest.json', release['files'])
         self.assertIn('2026-10-30T15:00:00+08:00', html)
         self.assertEqual(release['indexQuotesAvailable'], 9)
         self.assertEqual(release['indexQuotesCollectedAt'], '2026-10-30T17:55:00+08:00')

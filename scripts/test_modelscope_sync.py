@@ -152,6 +152,35 @@ class ModelScopeSyncTests(unittest.TestCase):
             checkout.sync(self.site, sorted(set(self.release['files']) | {'release.json'}))
         self.assertFalse((self.root / 'missing').exists())
 
+    def test_insurance_sync_preserves_history_and_rejects_unsafe_paths(self):
+        checkout = sync.StudioCheckout(self.root, sync.DEFAULT_REPO, TOKEN)
+        checkout.path.mkdir()
+        previous = checkout.path / 'insurance-data/20261104T000000-aaaaaaaa/meta.json'
+        previous.parent.mkdir(parents=True)
+        previous.write_text('keep history')
+        names = ['insurance-data/manifest.json', 'insurance-data/20261105T000000-bbbbbbbb/meta.json']
+        for name in names:
+            source = self.site / name
+            source.parent.mkdir(parents=True, exist_ok=True)
+            source.write_text('{}')
+        checkout.git = Mock(return_value=SimpleNamespace(returncode=0))
+        checkout.sync(self.site, names)
+        self.assertEqual(previous.read_text(), 'keep history')
+        self.assertEqual((checkout.path / names[1]).read_text(), '{}')
+        (self.site / names[1]).write_text('changed')
+        with self.assertRaisesRegex(sync.SyncError, 'immutable'):
+            checkout.sync(self.site, names)
+        for name in ['insurance-data/../../private.txt', 'insurance-data/database.xlsx']:
+            with self.assertRaisesRegex(sync.SyncError, 'Unowned'):
+                checkout.sync(self.site, [name])
+
+    def test_insurance_parent_symlink_is_rejected(self):
+        checkout = sync.StudioCheckout(self.root, sync.DEFAULT_REPO, TOKEN)
+        checkout.path.mkdir()
+        (checkout.path / 'insurance-data').symlink_to(self.site, target_is_directory=True)
+        with self.assertRaisesRegex(sync.SyncError, 'non-directory'):
+            checkout.sync(self.site, ['insurance-data/manifest.json'])
+
     def test_bootstrap_changes_only_baseline(self):
         dist = self.root / 'dist'
         dist.mkdir()

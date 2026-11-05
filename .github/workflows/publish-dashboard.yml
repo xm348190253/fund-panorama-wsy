@@ -5,12 +5,15 @@ on:
     paths:
       - scripts/insurance-ui.js
       - scripts/build_cloud_site.py
+      - scripts/insurance_snapshot.py
+      - scripts/modelscope_sync.py
       - .github/workflows/publish-dashboard.yml
   workflow_dispatch:
 permissions:
   contents: read
 jobs:
   publish:
+    if: github.repository == 'xm348190253/fund-panorama-wsy' && github.event.repository.visibility == 'public'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     concurrency:
@@ -36,6 +39,8 @@ jobs:
           python scripts/modelscope_sync.py bootstrap --dist dist
       - name: 读取最近指数行情并构建界面
         run: |
+          python -m unittest discover -s scripts -p 'test_insurance_snapshot.py'
+          python -m unittest discover -s scripts -p 'test_modelscope_sync.py'
           python scripts/refresh_index_quotes.py --require-any
           python scripts/build_cloud_site.py --output cloud-site --version "layout-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
       - name: 发布界面并验证全部文件

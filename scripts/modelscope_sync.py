@@ -22,6 +22,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from pathlib import Path
+from insurance_snapshot import build_snapshot, validate_snapshot, VERSION as INSURANCE_VERSION
 
 ROOT = Path(__file__).resolve().parents[1]
 API_BASE = 'https://modelscope.cn/openapi/v1'
@@ -258,9 +259,25 @@ class StudioCheckout:
         obsolete = current - set(names)
         for name in set(names) | obsolete:
             target = self.path / name
+            if '/' in name:
+                parts = Path(name).parts
+                valid = (name == 'insurance-data/manifest.json' or
+                         (len(parts) == 3 and parts[0] == 'insurance-data'
+                          and INSURANCE_VERSION.fullmatch(parts[1])
+                          and (parts[2] == 'meta.json' or re.fullmatch(r'period-20\d{2}-(?:0[1-9]|1[0-2])\.json', parts[2]))))
+                if not valid:
+                    raise SyncError('Unowned nested asset: ' + name)
+                for parent in target.parents:
+                    if parent == self.path:
+                        break
+                    if parent.is_symlink() or (parent.exists() and not parent.is_dir()):
+                        raise SyncError('Refusing to overwrite a non-directory asset parent: ' + name)
+                if len(parts) == 3 and target.is_file() and target.read_bytes() != (Path(site) / name).read_bytes():
+                    raise SyncError('Refusing to overwrite immutable insurance version: ' + name)
             if target.is_symlink() or (target.exists() and not regular_file(target)):
                 raise SyncError('Refusing to overwrite a non-regular repository file: ' + name)
         for name in names:
+            (self.path / name).parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(Path(site) / name, self.path / name)
         for name in obsolete:
             (self.path / name).unlink()
@@ -319,6 +336,11 @@ def publish(args, token):
     atomic_json(args.receipt, receipt)
     try:
         release, hashes = validate_site(args.site)
+        if 'insurance-dashboard-bootstrap' in (Path(args.site) / 'index.html').read_text(encoding='utf-8'):
+            build_snapshot(Path(args.site) / 'insurance-data')
+            insurance, insurance_hashes = validate_snapshot(Path(args.site) / 'insurance-data')
+            hashes.update(insurance_hashes)
+            receipt['insuranceVersion'] = insurance['version']
         receipt.update(version=release['version'], dataDate=release.get('dataDate'), assetCount=len(hashes),
                        indexQuotesCollectedAt=release.get('indexQuotesCollectedAt'),
                        indexQuotesAvailable=release.get('indexQuotesAvailable'))
@@ -355,6 +377,50 @@ def publish(args, token):
         raise
 
 
+def sync_insurance(args, token):
+    """Update only public insurance views, retaining every existing fund asset."""
+    receipt = {'status': 'started', 'phase': 'clone', 'startedAt': now(),
+               'studio': args.repo, 'pushed': False, 'verified': False}
+    atomic_json(args.receipt, receipt)
+    try:
+        client = Client(args.repo, token)
+        client.verify_configuration(client.api())
+        with temp_checkout(args.repo, token) as folder:
+            checkout = StudioCheckout(folder, args.repo, token)
+            source = checkout.clone()
+            release, fund_hashes = validate_site(source)
+            if 'insurance-dashboard-bootstrap' not in (source / 'index.html').read_text(encoding='utf-8'):
+                raise SyncError('Publish the insurance dashboard interface before synchronizing its data')
+            previous = source / 'insurance-data/manifest.json'
+            old_bytes = previous.read_bytes() if previous.exists() else None
+            manifest = build_snapshot(source / 'insurance-data')
+            _, insurance_hashes = validate_snapshot(source / 'insurance-data')
+            receipt.update(insuranceVersion=manifest['version'], fundVersion=release['version'])
+            if old_bytes == previous.read_bytes():
+                receipt.update(status='unchanged', phase='complete', completedAt=now())
+            else:
+                if validate_site(source)[1] != fund_hashes:
+                    raise SyncError('Insurance sync unexpectedly changed fund assets')
+                checkout.git('add', '--', *sorted(insurance_hashes))
+                checkout.git('-c', 'user.name=Fund Panorama Automation', '-c',
+                             'user.email=automation@users.noreply.github.com',
+                             'commit', '-m', 'Synchronize public insurance analysis ' + manifest['version'])
+                checkout.git('push', 'origin', 'HEAD:master')
+                receipt.update(pushed=True, phase='deploy')
+                atomic_json(args.receipt, receipt)
+                client.api('POST', '/deploy')
+                receipt['phase'] = 'verify'
+                atomic_json(args.receipt, receipt)
+                client.wait_verified(release, {**fund_hashes, **insurance_hashes}, args.timeout, args.poll_interval)
+                receipt.update(status='success', phase='complete', verified=True, completedAt=now())
+        atomic_json(args.receipt, receipt)
+        print('Insurance synchronization: ' + receipt['status'], flush=True)
+    except BaseException as exc:
+        receipt.update(status='failed', completedAt=now(), error=redact(str(exc), token)[:1500])
+        atomic_json(args.receipt, receipt)
+        raise
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest='command', required=True)
@@ -365,7 +431,11 @@ def main():
     pub.add_argument('--receipt', type=Path, default=ROOT / 'docs/cloud-deployment-receipt.json')
     pub.add_argument('--timeout', type=int, default=1800)
     pub.add_argument('--poll-interval', type=int, default=30)
-    for command in (boot, pub):
+    insurance = commands.add_parser('sync-insurance', help='Synchronize only public insurance JSON when its version changes')
+    insurance.add_argument('--receipt', type=Path, default=ROOT / 'docs/insurance-sync-receipt.json')
+    insurance.add_argument('--timeout', type=int, default=1800)
+    insurance.add_argument('--poll-interval', type=int, default=30)
+    for command in (boot, pub, insurance):
         command.add_argument('--repo', default=DEFAULT_REPO)
     args = parser.parse_args()
     token = os.environ.get('MODELSCOPE_API_KEY', '').strip()
@@ -373,10 +443,10 @@ def main():
         parser.error('Set MODELSCOPE_API_KEY through the automation secret environment')
     try:
         checked_repo(args.repo)
-        if args.command == 'publish':
+        if args.command in ('publish', 'sync-insurance'):
             if not 1 <= args.timeout <= 1800 or not 1 <= args.poll_interval <= 60:
                 raise SyncError('Timeout must be 1..1800 seconds and polling interval 1..60 seconds')
-            publish(args, token)
+            (publish if args.command == 'publish' else sync_insurance)(args, token)
         else:
             bootstrap(args, token)
     except (Exception, KeyboardInterrupt) as exc:

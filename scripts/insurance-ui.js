@@ -4,7 +4,7 @@
   const localFund=location.hostname.endsWith('.ms.show')||!!document.getElementById('deliveryBanner'),old=localFund?[...document.body.children].filter(e=>e.tagName!=='SCRIPT'):[];
   const requestFetch=(window.__INSURANCE_FETCH__||window.fetch).bind(window);
   const host=document.getElementById('am-app')||document.body.insertBefore(document.createElement('div'),document.body.firstChild);host.id='am-app';
-  const root=host.attachShadow({mode:'open'}),state={market:'insurance',page:new URLSearchParams(location.search).has('admin')?'upload':'analytics',module:'market',meta:null,data:null,report:null,reportMonth:null,category:'',manager:'',search:'',sort:'size',pageNo:1,admin:false};
+  const root=host.attachShadow({mode:'open'}),state={market:'insurance',page:new URLSearchParams(location.search).has('admin')?'upload':'analytics',module:'market',meta:null,data:null,cache:{},report:null,reportMonth:null,category:'',manager:'',search:'',sort:'size',pageNo:1,admin:false};
   const esc=s=>String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
   const fmt=(n,d=2)=>n===null||n===undefined?'待补':Number(n).toLocaleString('zh-CN',{minimumFractionDigits:d,maximumFractionDigits:d}),pct=n=>n===null||n===undefined?'待补':fmt(n*100)+'%',cats=['固定收益类（非货币类）','混合类','权益类','固定收益（货币类）'],colors=['#45c9c3','#70a6ee','#e4b16b','#ac9ad9'];
   const monthName=m=>m?.replace('-','年')+'月',download=(name,version)=>CLOUD+'/api/insurance/download/'+name+(version?'?version='+encodeURIComponent(version):'');
@@ -13,7 +13,40 @@
   if(localFund){const wrap=document.createElement('div');wrap.slot='funds';for(const el of old)if(el!==host)wrap.append(el);host.append(wrap);}
   else $('#funds-wrap').innerHTML='<div id="fund-status" class="loading">选择公募基金后读取已发布数据</div><iframe class="funds-frame" id="fund-frame" title="公募基金产品全景" hidden></iframe>';
   function toast(s){const d=document.createElement('div');d.className='am-toast';d.textContent=s;root.append(d);setTimeout(()=>d.remove(),5000);}
-  async function api(path,options={}){const r=await requestFetch(CLOUD+'/api/insurance'+path,{cache:'no-store',...options}),d=await r.json();if(!r.ok)throw new Error(d.error||'云端请求未完成');return d;}
+  let snapshotManifest=null;
+  async function snapshotJSON(path,spec=null){
+    const r=await requestFetch(location.origin+path,{cache:'no-store'});
+    if(!r.ok)throw new Error('保险资料暂未完成同步，请稍后重新读取');
+    const bytes=new Uint8Array(await r.arrayBuffer());
+    if(bytes.length>(spec?12000000:128000))throw new Error('保险资料大小异常，请重新读取');
+    if(spec){
+      if(!Number.isSafeInteger(spec.bytes)||spec.bytes<1||spec.bytes>12000000||!/^[a-f0-9]{64}$/.test(spec.sha256||''))throw new Error('保险资料校验清单异常');
+      const digest=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',bytes)),v=>v.toString(16).padStart(2,'0')).join('');
+      if(bytes.length!==spec.bytes||digest!==spec.sha256)throw new Error('保险资料正在同步，请稍后重新读取');
+    }
+    return JSON.parse(new TextDecoder('utf-8',{fatal:true}).decode(bytes));
+  }
+  async function snapshot(path){
+    if(path==='/meta'||!snapshotManifest){
+      const m=await snapshotJSON('/insurance-data/manifest.json');
+      if(!/^[A-Za-z0-9-]{10,80}$/.test(m.version||'')||!Array.isArray(m.months)||!m.months.length||m.months.length>360||m.months.some(x=>!/^20\d{2}-(0[1-9]|1[0-2])$/.test(x))||new Set(m.months).size!==m.months.length||!m.months.includes(m.latest)||!m.files)throw new Error('保险资料版本清单异常');
+      snapshotManifest=m;
+    }
+    const m=snapshotManifest,month=path.match(/^\/period\/(20\d{2}-(?:0[1-9]|1[0-2]))$/),name=path==='/meta'?'meta.json':month&&m.months.includes(month[1])?'period-'+month[1]+'.json':null;
+    if(!name||!m.files[name])throw new Error('该月份尚未同步，请重新读取');
+    const data=await snapshotJSON('/insurance-data/'+m.version+'/'+name,m.files[name]);
+    if(path==='/meta'){
+      if(data.version!==m.version||data.latest!==m.latest||JSON.stringify(data.months)!==JSON.stringify(m.months))throw new Error('保险资料版本不一致，请重新读取');
+      return {...data,mirrorSyncedAt:m.syncedAt};
+    }
+    if(data.month!==month[1])throw new Error('保险资料月份不一致，请重新读取');
+    return data;
+  }
+  async function api(path,options={}){
+    if(localFund&&(!options.method||options.method==='GET')&&(path==='/meta'||path.startsWith('/period/')))return snapshot(path);
+    const r=await requestFetch(CLOUD+'/api/insurance'+path,{cache:'no-store',...options}),d=await r.json();if(!r.ok)throw new Error(d.error||'云端请求未完成');return d;
+  }
+  const dataStatus=()=> '最新资料 '+state.meta.latest+(localFund?' · 魔搭已同步':' · 云端已保存');
   async function loadFunds(){
     const status=$('#fund-status'),frame=$('#fund-frame');if(!status||frame.dataset.loaded||frame.dataset.loading)return;
     frame.dataset.loading='1';status.hidden=false;status.textContent='正在读取并校验公募共用版本…';
@@ -38,7 +71,8 @@
       let html=new TextDecoder().decode(buffers['index.html']);
       html=html.replace("script-src 'self' 'unsafe-inline'","script-src 'self' 'unsafe-inline' blob:").replace('script-src &#x27;self&#x27; &#x27;unsafe-inline&#x27;','script-src &#x27;self&#x27; &#x27;unsafe-inline&#x27; blob:');
       html=html.replace(/(<script\s+src=")(snapshot(?:-perf-\d{3})?\.js|market\.js)("\s*>)/g,(_,a,n,z)=>a+urls[n]+z).replace(/href="echarts\.min\.js"/g,'href="'+urls['echarts.min.js']+'"').replace(/window\.__echartsTries\s*=\s*\[[\s\S]*?\];/,'window.__echartsTries=['+JSON.stringify(urls['echarts.min.js'])+'];');
-      if(/<script\b[^>]*src=["'](?!blob:)/i.test(html))throw new Error('公募页面存在未校验的脚本引用');
+      const parsed=new DOMParser().parseFromString(html,'text/html'),verifiedUrls=new Set(Object.values(urls));
+      if([...parsed.querySelectorAll('script[src]')].some(script=>!verifiedUrls.has(script.getAttribute('src'))))throw new Error('公募页面存在未校验的脚本引用');
       html=html.replace('<head>','<head><script>window.__INSURANCE_FUND_ONLY__=true;</'+'script>');
       frame.srcdoc=html;frame.hidden=false;frame.dataset.loaded='1';status.hidden=true;state.fundVersion=release.version;
       $('#top-status').textContent='公募共用版本 '+release.version+' · '+release.dataDate;
@@ -46,13 +80,13 @@
     finally{delete frame.dataset.loading;}
   }
   async function reload(){
-    try{state.meta=await api('/meta');state.data=await api('/period/'+state.meta.latest);state.reportMonth=state.reportMonth&&state.meta.months.includes(state.reportMonth)?state.reportMonth:state.meta.latest;$('#top-status').textContent='最新资料 '+state.meta.latest+' · 云端已保存';render();}
+    try{state.meta=await api('/meta');state.data=await api('/period/'+state.meta.latest);state.cache={[state.meta.latest]:state.data};state.reportMonth=state.reportMonth&&state.meta.months.includes(state.reportMonth)?state.reportMonth:state.meta.latest;$('#top-status').textContent=dataStatus();render();}
     catch(e){$('#content').innerHTML='<div class="panel empty">'+esc(e.message)+'<br><br><button id="retry">重新读取</button></div>';$('#retry').onclick=reload;$('#top-status').textContent='资料尚未读取';}
   }
   function switchMarket(m){
     state.market=m;$$('[data-market]').forEach(b=>b.classList.toggle('active',b.dataset.market===m));$('#insurance-layout').hidden=m!=='insurance';$('#insurance-layout').style.display=m==='insurance'?'grid':'none';
     if(window.innerWidth<721&&m==='insurance')$('#insurance-layout').style.display='block';
-    $('#funds-wrap').hidden=m!=='funds';if(m==='funds'){if(!localFund)loadFunds();window.dispatchEvent(new Event('resize'));}else if(state.meta)$('#top-status').textContent='最新资料 '+state.meta.latest+' · 云端已保存';
+    $('#funds-wrap').hidden=m!=='funds';if(m==='funds'){if(!localFund)loadFunds();window.dispatchEvent(new Event('resize'));}else if(state.meta)$('#top-status').textContent=dataStatus();
   }
   function setPage(p){state.page=p;switchMarket('insurance');render();window.scrollTo({top:0,behavior:'smooth'});}
   $$('[data-market]').forEach(b=>b.onclick=()=>switchMarket(b.dataset.market));
@@ -68,7 +102,7 @@
     const d=state.data,m=d.metrics,period='<div class="period-pill">最新资料月份 <b>'+d.month+'</b></div>';
     const heading=title('保险资管 · 行业与产品分析','行业全口径与开放式披露样本分别呈现，单位：亿元',period);
     const kpi='<div class="kpi-grid"><div class="kpi"><div class="label">行业净资产规模（亿元）</div><strong>'+fmt(m.size)+'</strong><small>原表环比 <span class="'+(m.mom<0?'down':'up')+'">'+pct(m.mom)+'</span></small></div><div class="kpi"><div class="label">行业产品只数</div><strong>'+fmt(m.count,0)+'</strong><small>报告期未终止产品</small></div><div class="kpi"><div class="label">管理机构</div><strong>'+m.managerCount+'</strong><small>前五家规模占比 '+pct(m.top5)+'</small></div><div class="kpi"><div class="label">开放式披露样本</div><strong>'+fmt(m.sampleCount,0)+'</strong><small>'+m.sampleManagerCount+'家机构 · 样本规模 '+fmt(m.sampleSize)+'</small></div></div>';
-    return heading+kpi+'<nav class="section-nav" aria-label="分析模块"><button data-module="market" class="'+(state.module==='market'?'active':'')+'">全市场统计</button><button data-module="risk" class="'+(state.module==='risk'?'active':'')+'">风险收益分析</button><button data-module="products" class="'+(state.module==='products'?'active':'')+'">产品分类</button></nav><div id="module-content">'+(state.module==='market'?market():state.module==='risk'?risk():products())+'</div><div class="am-footer">数据截至 '+d.period+' · '+d.sources.length+'份原报告 · <a class="am-btn" href="'+download('database.xlsx')+'">下载最新产品数据库</a></div>';
+    return heading+kpi+'<nav class="section-nav" aria-label="分析模块"><button data-module="market" class="'+(state.module==='market'?'active':'')+'">全市场统计</button><button data-module="risk" class="'+(state.module==='risk'?'active':'')+'">风险收益分析</button><button data-module="products" class="'+(state.module==='products'?'active':'')+'">产品分类</button></nav><div id="module-content">'+(state.module==='market'?market():state.module==='risk'?risk():products())+'</div><div class="am-footer">数据截至 '+d.period+' · '+d.sources.length+'份原报告 · <a class="am-btn" href="'+download('database.xlsx')+'" target="_blank" rel="noopener">下载最新产品数据库</a></div>';
   }
   function market(){
     const d=state.data,types=d.types.filter(r=>r.name!=='总计');
@@ -119,16 +153,16 @@
   function reports(){
     const options=[...state.meta.months].reverse().map(m=>'<option value="'+m+'"'+(m===state.reportMonth?' selected':'')+'>'+monthName(m)+(m===state.meta.latest?' · 最新':'')+'</option>').join('');
     return title('保险资管 · 月报中心','按报告实际月份归档；上传新月份后自动加入列表')+
-      '<div class="panel report-controls"><label for="report-month">选择月份</label><select id="report-month">'+options+'</select><a class="am-btn primary" id="report-bundle" href="'+download('report-'+state.reportMonth+'.zip')+'">一键导出 Word＋Excel</a><a class="am-btn" id="report-word" href="'+download('report-'+state.reportMonth+'.docx')+'">Word</a><a class="am-btn" id="report-excel" href="'+download('report-'+state.reportMonth+'.xlsx')+'">Excel 明细</a></div><div id="report-body"><div class="loading"><span class="spinner"></span>正在读取本期月报…</div></div>';
+      '<div class="panel report-controls"><label for="report-month">选择月份</label><select id="report-month">'+options+'</select><a class="am-btn primary" id="report-bundle" href="'+download('report-'+state.reportMonth+'.zip')+'" target="_blank" rel="noopener">一键导出 Word＋Excel</a><a class="am-btn" id="report-word" href="'+download('report-'+state.reportMonth+'.docx')+'" target="_blank" rel="noopener">Word</a><a class="am-btn" id="report-excel" href="'+download('report-'+state.reportMonth+'.xlsx')+'" target="_blank" rel="noopener">Excel 明细</a><span class="subtle">下载将在新窗口打开，首次需登录看板所有者账号。</span></div><div id="report-body"><div class="loading"><span class="spinner"></span>正在读取本期月报…</div></div>';
   }
   async function loadReport(){
     const wanted=state.reportMonth;
-    try{const v=await api('/period/'+wanted);if(state.reportMonth!==wanted||state.page!=='reports')return;state.report=v;
+    try{const v=state.cache[wanted]||await api('/period/'+wanted);state.cache[wanted]=v;if(state.reportMonth!==wanted||state.page!=='reports')return;state.report=v;
       $('#report-body').innerHTML='<article class="report-paper"><div class="eyebrow">INSURANCE ASSET MANAGEMENT · MONTHLY REPORT</div><h1>'+esc(v.report.title)+'</h1><div class="subtle">'+esc(v.report.subtitle)+'</div>'+
         v.report.sections.map((s,i)=>'<section><h2>'+esc(s.title)+'</h2>'+(s.text||[]).map(t=>'<p>'+esc(t)+'</p>').join('')+(s.tables||[]).map((t,j)=>'<details'+(i===1&&j===0?' open':'')+'><summary>'+esc(t.title)+'<span class="subtle">　'+t.rows.length+'行</span></summary>'+table(t.headers,t.rows.map(r=>r.map(esc)))+'</details>').join('')+'</section>').join('')+'<div class="report-source">'+v.sources.map(s=>esc(s.name)+'<br>SHA-256 '+s.sha256).join('<br><br>')+'</div></article>';
     }catch(e){if($('#report-body'))$('#report-body').innerHTML='<div class="panel empty">'+esc(e.message)+'</div>';}
   }
-  function history(){return '<div class="history-list">'+state.meta.history.slice(0,12).map((v,i)=>'<div class="history-item"><div>'+(i===0?'当前版本':'历史版本')+' · '+new Date(v.created).toLocaleString('zh-CN',{timeZone:'Asia/Shanghai'})+'<small>资料期 '+v.months.join('、')+'</small></div><a class="am-btn" href="'+download('database.xlsx',v.version)+'">下载该版Excel</a></div>').join('')+'</div>';}
+  function history(){return '<div class="history-list">'+state.meta.history.slice(0,12).map((v,i)=>'<div class="history-item"><div>'+(i===0?'当前版本':'历史版本')+' · '+new Date(v.created).toLocaleString('zh-CN',{timeZone:'Asia/Shanghai'})+'<small>资料期 '+v.months.join('、')+'</small></div><a class="am-btn" href="'+download('database.xlsx',v.version)+'" target="_blank" rel="noopener">下载该版Excel</a></div>').join('')+'</div>';}
   function upload(){
     return title('资料上传与云端更新','上传同月份的两份行业报告，自动联动数据库、分析和月报')+
       '<div class="upload-area">'+panel('每月更新流程','<div class="step-strip"><span>① 上传两份报告</span><span>② 核验月份与数据</span><span>③ 更新Excel和月报</span><span>④ 发布最新数据</span></div><div class="callout">新月份追加到历史列表；同月修订保留上一版本。重复资料跳过导入。更新校验完成后显示成功结果。</div>')+
@@ -136,7 +170,7 @@
       panel('历史更新版本',history(),state.meta.sourceFiles+'份有效原报告 · '+state.meta.productRows+'条产品历史记录')+'</div>';
   }
   async function loadAdmin(){
-    if(localFund){$('#upload-control').innerHTML='<h2>云端资料管理</h2><p class="subtle">使用看板所有者账号登录后上传，两个人访问入口共用更新结果。</p><a class="am-btn primary" href="'+CLOUD+'/?admin=1" target="_blank" rel="noopener">进入云端上传管理 ↗</a>';return;}
+    if(localFund){$('#upload-control').innerHTML='<h2>云端资料管理</h2><p class="subtle">使用看板所有者账号登录后上传。云端生成后，魔搭每15分钟检查更新；本页最近成功同步：'+esc(state.meta.mirrorSyncedAt?new Date(state.meta.mirrorSyncedAt).toLocaleString('zh-CN',{timeZone:'Asia/Shanghai'}):'待确认')+'。</p><a class="am-btn primary" href="'+CLOUD+'/?admin=1" target="_blank" rel="noopener">进入云端上传管理 ↗</a>';return;}
     try{
       const a=await api('/admin');state.admin=a.admin;
       if(!a.admin){$('#upload-control').innerHTML='<h2>登录后上传资料</h2><p class="subtle">看板浏览无需登录。上传与策略标签确认限看板所有者账号操作。</p><a class="am-btn primary" href="'+a.signin+'" target="_top">使用 ChatGPT 账号登录</a>';return;}
@@ -146,7 +180,7 @@
         const status=$('#upload-state'),button=$('#upload-submit'),form=new FormData();form.append('files',f1);form.append('files',f2);
         button.disabled=true;status.className='upload-state';status.textContent='正在上传、校验并生成新版Excel和月报，请等待结果…';
         try{const r=await api('/upload',{method:'POST',body:form});status.className='upload-state success';status.textContent=r.message+'\n资料月份：'+r.months.join('、')+'\n最新月份：'+r.latest;
-          state.meta=await api('/meta');state.data=await api('/period/'+state.meta.latest);$('#top-status').textContent='最新资料 '+state.meta.latest+' · 云端已保存';toast(r.message);
+          state.meta=await api('/meta');state.data=await api('/period/'+state.meta.latest);state.cache={[state.meta.latest]:state.data};$('#top-status').textContent='最新资料 '+state.meta.latest+' · 云端已保存';toast(r.message);
         }catch(err){status.className='upload-state error';status.textContent=err.message+'\n此次更新未发布，当前版本继续保留。';}
         finally{button.disabled=false;}
       };
