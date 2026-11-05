@@ -6,7 +6,7 @@
   const host=document.getElementById('am-app')||document.body.insertBefore(document.createElement('div'),document.body.firstChild);host.id='am-app';
   const root=host.attachShadow({mode:'open'}),state={market:'insurance',page:new URLSearchParams(location.search).has('admin')?'upload':'analytics',module:'market',meta:null,data:null,cache:{},report:null,reportMonth:null,category:'',chartCategory:'固定收益类（非货币类）',manager:'',search:'',sort:'size',pageNo:1,admin:false};
   const esc=s=>String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
-  const fmt=(n,d=2)=>n===null||n===undefined?'待补':Number(n).toLocaleString('zh-CN',{minimumFractionDigits:d,maximumFractionDigits:d}),pct=n=>n===null||n===undefined?'待补':fmt(n*100)+'%',cats=['固定收益类（非货币类）','混合类','权益类','固定收益（货币类）'],colors=['#45c9c3','#70a6ee','#e4b16b','#ac9ad9'];
+  const fmt=(n,d=2)=>n===null||n===undefined?'待补':Number(n).toLocaleString('zh-CN',{minimumFractionDigits:d,maximumFractionDigits:d}),pct=(n,missing='待补')=>n===null||n===undefined?missing:fmt(n*100)+'%',cats=['固定收益类（非货币类）','混合类','权益类','固定收益（货币类）'],colors=['#45c9c3','#70a6ee','#e4b16b','#ac9ad9'];
   const monthName=m=>m?.replace('-','年')+'月',download=(name,version)=>localFund&&snapshotManifest&&(!version||version===snapshotManifest.version)&&snapshotManifest.files[name]?location.origin+'/insurance-data/'+snapshotManifest.version+'/'+name:CLOUD+'/api/insurance/download/'+name+(version?'?version='+encodeURIComponent(version):'');
   const $=s=>root.querySelector(s),$$=s=>[...root.querySelectorAll(s)],numeric=(v,d=2)=>'<span class="'+(v<0?'down':v>0?'up':'')+'">'+fmt(v,d)+'</span>';
   const numericPct=v=>'<span class="'+(v<0?'down':v>0?'up':'')+'">'+pct(v)+'</span>';
@@ -152,7 +152,7 @@
   }
   function productTable(){
     const a=filtered(),pages=Math.max(1,Math.ceil(a.length/25));state.pageNo=Math.min(state.pageNo,pages);const shown=a.slice((state.pageNo-1)*25,state.pageNo*25);
-    return table(['产品名称 / 产品ID','管理机构','报告类别','规模','本月收益','YTD累计收益','货币YTD年化','成立日期'],shown.map(r=>['<span title="'+esc(r.file+' / 表'+r.table+' / 行'+r.row)+'">'+esc(r.name)+'</span><div class="subtle">'+r.id+'</div>',esc(r.manager),esc(r.category),fmt(r.size),pct(r.monthly),pct(r.ytd),pct(r.annualized),esc(r.inception)]))+
+    return table(['产品名称 / 产品ID','管理机构','报告类别','规模','本月收益','YTD累计收益','货币YTD年化','成立日期'],shown.map(r=>['<span title="'+esc(r.file+' / 表'+r.table+' / 行'+r.row)+'">'+esc(r.name)+'</span><div class="subtle">'+r.id+'</div>',esc(r.manager),esc(r.category),fmt(r.size),pct(r.monthly,'/'),pct(r.ytd,'/'),pct(r.annualized,'/'),esc(r.inception)]))+
       '<div class="pager"><span class="subtle">共 '+a.length+'只 · 第 '+state.pageNo+' / '+pages+' 页 · 每页25只</span><div class="controls"><button id="prev" '+(state.pageNo===1?'disabled':'')+'>上一页</button><button id="next" '+(state.pageNo===pages?'disabled':'')+'>下一页</button></div></div>';
   }
   function products(){
@@ -164,7 +164,7 @@
     function refresh(){state.pageNo=1;$('#product-table').innerHTML=productTable();bindPager();}
     $('#category').onchange=e=>{state.category=e.target.value;refresh();};$('#manager').onchange=e=>{state.manager=e.target.value;refresh();};$('#sort').onchange=e=>{state.sort=e.target.value;refresh();};
     let timer;$('#search').oninput=e=>{state.search=e.target.value;clearTimeout(timer);timer=setTimeout(refresh,150);};
-    $('#export-filter').onclick=()=>{const headers=['产品ID','产品名称','管理机构','报告大类','期末规模 亿元','本月收益率','YTD累计收益率','货币YTD年化收益率','成立日期','来源文件','原表表号','原表行号'],rows=filtered().map(r=>[r.id,r.name,r.manager,r.category,r.size,pct(r.monthly),pct(r.ytd),pct(r.annualized),r.inception,r.file,r.table,r.row]),csv='\ufeff'+[headers,...rows].map(a=>a.map(v=>'"'+String(v??'').replace(/"/g,'""')+'"').join(',')).join('\r\n'),url=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'})),a=document.createElement('a');a.href=url;a.download='保险资管产品_'+state.data.month+'_筛选明细.csv';a.click();setTimeout(()=>URL.revokeObjectURL(url),5000);};bindPager();
+    $('#export-filter').onclick=()=>{const headers=['产品ID','产品名称','管理机构','报告大类','期末规模 亿元','本月收益率','YTD累计收益率','货币YTD年化收益率','成立日期','来源文件','原表表号','原表行号'],rows=filtered().map(r=>[r.id,r.name,r.manager,r.category,r.size,pct(r.monthly,'/'),pct(r.ytd,'/'),pct(r.annualized,'/'),r.inception,r.file,r.table,r.row]),csv='\ufeff'+[headers,...rows].map(a=>a.map(v=>'"'+String(v??'').replace(/"/g,'""')+'"').join(',')).join('\r\n'),url=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'})),a=document.createElement('a');a.href=url;a.download='保险资管产品_'+state.data.month+'_筛选明细.csv';a.click();setTimeout(()=>URL.revokeObjectURL(url),5000);};bindPager();
   }
   function bindPager(){if($('#prev'))$('#prev').onclick=()=>{state.pageNo--;$('#product-table').innerHTML=productTable();bindPager();};if($('#next'))$('#next').onclick=()=>{state.pageNo++;$('#product-table').innerHTML=productTable();bindPager();};}
   function reports(){
