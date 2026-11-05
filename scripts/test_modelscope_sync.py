@@ -94,6 +94,17 @@ class ModelScopeSyncTests(unittest.TestCase):
         self.assertIsNone(request.data)
         self.assertEqual(request.full_url, sync.API_BASE + '/studios/' + sync.DEFAULT_REPO + '/deploy')
 
+    def test_office_lfs_objects_are_uploaded_before_branch_update(self):
+        checkout = sync.StudioCheckout(self.root, sync.DEFAULT_REPO, TOKEN)
+        checkout.git = Mock()
+        checkout.push()
+        self.assertEqual([call.args for call in checkout.git.call_args_list],
+                         [('lfs', 'push', 'origin', 'HEAD'), ('push', 'origin', 'HEAD:master')])
+        checkout.git = Mock(side_effect=sync.SyncError('LFS transfer failed'))
+        with self.assertRaisesRegex(sync.SyncError, 'LFS transfer failed'):
+            checkout.push()
+        self.assertEqual(checkout.git.call_count, 1)
+
     def test_deploy_accepts_success_acknowledgement_without_object_data(self):
         client = sync.Client(sync.DEFAULT_REPO, TOKEN)
         for response in ({'success': True}, {'success': True, 'data': None},
@@ -313,7 +324,7 @@ class ModelScopeSyncTests(unittest.TestCase):
         self.assertEqual(receipt['indexQuotesAvailable'], 9)
         self.assertTrue(receipt['pushed'])
         self.assertTrue(receipt['deployRequested'])
-        self.assertIn(('push', 'origin', 'HEAD:master'), [call.args for call in checkout.git.call_args_list])
+        checkout.push.assert_called_once_with()
         self.assertFalse(any('--force' in call.args for call in checkout.git.call_args_list))
         client.api.side_effect = [self.info, sync.SyncError('API error ' + TOKEN)]
         with patch.object(sync, 'ROOT', self.root), patch.object(sync, 'StudioCheckout', return_value=checkout), patch.object(sync, 'Client', return_value=client):

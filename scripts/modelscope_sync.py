@@ -253,6 +253,13 @@ class StudioCheckout:
                  'https://modelscope.cn/studios/' + self.repo + '.git', str(self.path), cwd=self.folder)
         return self.path
 
+    def push(self):
+        # Studio attributes route Office/ZIP files through Git LFS. Hooks are
+        # disabled for repository safety, so upload LFS objects explicitly before
+        # updating the branch; otherwise ModelScope rejects missing objects.
+        self.git('lfs', 'push', 'origin', 'HEAD')
+        self.git('push', 'origin', 'HEAD:master')
+
     def sync(self, site, names):
         """Only take ownership of known runtime assets, never deployment settings."""
         current = {p.name for p in self.path.iterdir() if SHARD_RE.fullmatch(p.name)}
@@ -371,7 +378,7 @@ def publish(args, token):
             receipt['commit'] = checkout.git('rev-parse', 'HEAD').stdout.strip()
             if changed:
                 receipt['phase'] = 'push'
-                checkout.git('push', 'origin', 'HEAD:master')
+                checkout.push()
                 receipt['pushed'] = True
             receipt['phase'] = 'deploy'
             atomic_json(args.receipt, receipt)
@@ -419,7 +426,7 @@ def sync_insurance(args, token):
                 checkout.git('-c', 'user.name=Fund Panorama Automation', '-c',
                              'user.email=automation@users.noreply.github.com',
                              'commit', '-m', 'Synchronize public insurance analysis ' + manifest['version'])
-                checkout.git('push', 'origin', 'HEAD:master')
+                checkout.push()
                 receipt.update(pushed=True, phase='deploy')
                 atomic_json(args.receipt, receipt)
                 client.api('POST', '/deploy')
