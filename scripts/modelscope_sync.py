@@ -254,11 +254,36 @@ class StudioCheckout:
         return self.path
 
     def push(self):
-        # Studio attributes route Office/ZIP files through Git LFS. Hooks are
-        # disabled for repository safety, so upload LFS objects explicitly before
-        # updating the branch; otherwise ModelScope rejects missing objects.
+        # Upload any remaining repository LFS objects explicitly because hooks
+        # are disabled; ModelScope rejects branch updates with missing objects.
         self.git('lfs', 'push', 'origin', 'HEAD')
         self.git('push', 'origin', 'HEAD:master')
+
+    def stage_assets(self, names):
+        names = sorted(set(names))
+        archives = [name for name in names if name.startswith('insurance-data/') and name.endswith('.zip')]
+        if archives:
+            # The static Studio serves LFS pointers verbatim. Keep these small
+            # public report bundles as ordinary blobs, including future months.
+            directory = self.path / 'insurance-data'
+            attributes = directory / '.gitattributes'
+            if directory.is_symlink() or (directory.exists() and not directory.is_dir()):
+                raise SyncError('Insurance download directory is not a regular directory')
+            if attributes.is_symlink() or (attributes.exists() and not regular_file(attributes)):
+                raise SyncError('Insurance download attributes are not a regular file')
+            directory.mkdir(parents=True, exist_ok=True)
+            current = attributes.read_text(encoding='utf-8') if attributes.exists() else ''
+            rule = '*.zip -filter -diff -merge -text'
+            lines = [line for line in current.splitlines() if line.strip()]
+            if not lines or lines[-1] != rule:
+                attributes.write_text(current + ('\n' if current and not current.endswith('\n') else '')
+                                      + rule + '\n', encoding='utf-8')
+            names.append('insurance-data/.gitattributes')
+        self.git('add', '--', *names)
+        if archives:
+            # Re-clean tracked files as well, replacing existing LFS pointers
+            # without changing the downloaded ZIP bytes or version history.
+            self.git('add', '--renormalize', '--', *archives)
 
     def sync(self, site, names):
         """Only take ownership of known runtime assets, never deployment settings."""
@@ -288,7 +313,7 @@ class StudioCheckout:
             shutil.copyfile(Path(site) / name, self.path / name)
         for name in obsolete:
             (self.path / name).unlink()
-        self.git('add', '--', *sorted(set(names) | obsolete))
+        self.stage_assets(set(names) | obsolete)
         changed = self.git('diff', '--cached', '--quiet', allowed=(0, 1)).returncode == 1
         if changed:
             self.git('-c', 'user.name=Fund Panorama Automation', '-c', 'user.email=automation@users.noreply.github.com',
@@ -412,17 +437,16 @@ def sync_insurance(args, token):
             release, fund_hashes = validate_site(source)
             if 'insurance-dashboard-bootstrap' not in (source / 'index.html').read_text(encoding='utf-8'):
                 raise SyncError('Publish the insurance dashboard interface before synchronizing its data')
-            previous = source / 'insurance-data/manifest.json'
-            old_bytes = previous.read_bytes() if previous.exists() else None
             manifest = build_snapshot(source / 'insurance-data')
             _, insurance_hashes = validate_snapshot(source / 'insurance-data')
             receipt.update(insuranceVersion=manifest['version'], fundVersion=release['version'])
-            if old_bytes == previous.read_bytes():
+            checkout.stage_assets(insurance_hashes)
+            changed = checkout.git('diff', '--cached', '--quiet', allowed=(0, 1)).returncode == 1
+            if not changed:
                 receipt.update(status='unchanged', phase='complete', completedAt=now())
             else:
                 if validate_site(source)[1] != fund_hashes:
                     raise SyncError('Insurance sync unexpectedly changed fund assets')
-                checkout.git('add', '--', *sorted(insurance_hashes))
                 checkout.git('-c', 'user.name=Fund Panorama Automation', '-c',
                              'user.email=automation@users.noreply.github.com',
                              'commit', '-m', 'Synchronize public insurance analysis ' + manifest['version'])

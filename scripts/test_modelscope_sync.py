@@ -3,8 +3,11 @@
 import base64
 import io
 import json
+import shlex
+import sys
 import tempfile
 import unittest
+import zipfile
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
@@ -124,6 +127,52 @@ class ModelScopeSyncTests(unittest.TestCase):
                 client.api_opener.open = Mock(return_value=io.BytesIO(json.dumps(response).encode()))
                 with self.assertRaisesRegex(sync.SyncError, 'malformed'):
                     client.api()
+
+    def test_report_zip_is_stored_as_real_bytes_instead_of_lfs_pointer(self):
+        checkout = sync.StudioCheckout(self.root, sync.DEFAULT_REPO, TOKEN)
+        checkout.path.mkdir()
+        checkout.git('init', '--object-format=sha1')
+        root_attributes = '*.zip filter=lfs diff=lfs merge=lfs -text\n'
+        (checkout.path / '.gitattributes').write_text(root_attributes)
+        cleaner = self.root / 'fixture-lfs-clean.py'
+        cleaner.write_text('import hashlib, sys\n'
+                           'data = sys.stdin.buffer.read()\n'
+                           'print("version https://git-lfs.github.com/spec/v1")\n'
+                           'print("oid sha256:" + hashlib.sha256(data).hexdigest())\n'
+                           'print("size " + str(len(data)))\n')
+        checkout.git('config', 'filter.lfs.clean', shlex.quote(sys.executable) + ' ' + shlex.quote(str(cleaner)))
+        checkout.git('config', 'filter.lfs.required', 'true')
+        name = 'insurance-data/20261105T000000-bbbbbbbb/report-2026-09.zip'
+        archive = checkout.path / name
+        archive.parent.mkdir(parents=True)
+        with zipfile.ZipFile(archive, 'w') as bundle:
+            bundle.writestr('report.txt', 'verified report bytes')
+        payload = archive.read_bytes()
+        expected = sync.hashlib.sha1(b'blob ' + str(len(payload)).encode() + b'\0' + payload).hexdigest()
+        attributes = checkout.path / 'insurance-data/.gitattributes'
+        attributes.write_text('*.json text\n')
+        checkout.git('add', '--', '.gitattributes', 'insurance-data/.gitattributes', name)
+        self.assertIn('version https://git-lfs.github.com/spec/v1', checkout.git('show', ':' + name).stdout)
+        checkout.stage_assets([name])
+        self.assertEqual(checkout.git('rev-parse', ':' + name).stdout.strip(), expected)
+        self.assertEqual(archive.read_bytes(), payload)
+        self.assertEqual((checkout.path / '.gitattributes').read_text(), root_attributes)
+        self.assertTrue(attributes.read_text().startswith('*.json text\n'))
+        saved_attributes = attributes.read_bytes()
+        checkout.stage_assets([name])
+        self.assertEqual(attributes.read_bytes(), saved_attributes)
+        self.assertEqual(checkout.git('rev-parse', ':' + name).stdout.strip(), expected)
+
+    def test_download_attributes_symlink_is_not_followed(self):
+        checkout = sync.StudioCheckout(self.root, sync.DEFAULT_REPO, TOKEN)
+        directory = checkout.path / 'insurance-data'
+        directory.mkdir(parents=True)
+        original = self.root / 'keep.txt'
+        original.write_text('keep')
+        (directory / '.gitattributes').symlink_to(original)
+        with self.assertRaisesRegex(sync.SyncError, 'attributes'):
+            checkout.stage_assets(['insurance-data/20261105T000000-bbbbbbbb/report-2026-09.zip'])
+        self.assertEqual(original.read_text(), 'keep')
 
     def test_refuses_paid_hardware_and_other_hosts(self):
         client = sync.Client(sync.DEFAULT_REPO, TOKEN)
