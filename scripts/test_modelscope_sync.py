@@ -222,6 +222,23 @@ class ModelScopeSyncTests(unittest.TestCase):
                 sync.bootstrap(SimpleNamespace(repo=sync.DEFAULT_REPO, dist=dist), TOKEN)
         self.assertEqual({p.name: p.read_text() for p in dist.iterdir()}, originals)
 
+    def test_layout_bootstrap_retains_verified_quote_timestamp(self):
+        from test_index_quotes import snapshot
+        quotes = snapshot()
+        (self.site / 'index.html').write_text('<head><script>window.__FUND_INDEX_SNAPSHOT__=' + json.dumps(quotes) + ';</script></head>')
+        self.release['files']['index.html']['sha256'] = sync.digest((self.site / 'index.html').read_bytes())
+        self.write_release()
+        cache = self.root / 'source-cache/index-quotes.json'
+        args = SimpleNamespace(repo=sync.DEFAULT_REPO, dist=self.root / 'dist', quote_cache=cache)
+        with patch.object(sync, 'ROOT', self.root), patch.object(sync.StudioCheckout, 'clone', return_value=self.site):
+            sync.bootstrap(args, TOKEN)
+        self.assertEqual(json.loads(cache.read_text()), quotes)
+        self.assertEqual(json.loads(cache.read_text())['collectedAt'], quotes['collectedAt'])
+        (self.site / 'index.html').write_text('tampered')
+        with patch.object(sync, 'ROOT', self.root), patch.object(sync.StudioCheckout, 'clone', return_value=self.site):
+            with self.assertRaisesRegex(sync.SyncError, 'checksum'):
+                sync.bootstrap(args, TOKEN)
+
     def test_bootstrap_rejects_empty_or_symlink_chart_before_changes(self):
         dist, source = self.root / 'dist', self.root / 'remote'
         dist.mkdir()

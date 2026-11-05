@@ -301,6 +301,18 @@ def bootstrap(args, token):
     with temp_checkout(args.repo, token) as folder:
         checkout = StudioCheckout(folder, args.repo, token)
         source = checkout.clone()
+        quote_cache = getattr(args, 'quote_cache', None)
+        quote_snapshot = None
+        if quote_cache:
+            # Layout-only publication reuses the verified published quotes.
+            # Refreshing independent external feeds must not block a UI repair.
+            validate_site(source)
+            from refresh_index_quotes import validate_snapshot as validate_quotes
+            match = re.search(r'<script>window\.__FUND_INDEX_SNAPSHOT__=(.+?);</script>',
+                              (source / 'index.html').read_text(encoding='utf-8'), re.S)
+            if not match:
+                raise SyncError('Published index quote snapshot is missing')
+            quote_snapshot = validate_quotes(json.loads(match.group(1)))
         names = {'snapshot.js', 'echarts.min.js'} | {p.name for p in source.iterdir() if SHARD_RE.fullmatch(p.name)}
         if len(names) < 3 or any(not regular_file(source / n) or not (source / n).stat().st_size for n in names):
             raise SyncError('Remote snapshot/chart baseline is incomplete')
@@ -319,6 +331,8 @@ def bootstrap(args, token):
                 shutil.copyfile(source / name, dist / name)
             for name in old - names:
                 (dist / name).unlink(missing_ok=True)
+            if quote_cache:
+                atomic_json(quote_cache, quote_snapshot)
         except BaseException:
             for name in old | names:
                 (dist / name).unlink(missing_ok=True)
@@ -426,6 +440,7 @@ def main():
     commands = parser.add_subparsers(dest='command', required=True)
     boot = commands.add_parser('bootstrap', help='Fetch snapshot and chart-library baselines; no website publication')
     boot.add_argument('--dist', type=Path, default=ROOT / 'dist')
+    boot.add_argument('--quote-cache', type=Path, help='Reuse verified published index quotes for a layout-only build')
     pub = commands.add_parser('publish', help='Publish and verify a validated static release')
     pub.add_argument('--site', required=True, type=Path)
     pub.add_argument('--receipt', type=Path, default=ROOT / 'docs/cloud-deployment-receipt.json')

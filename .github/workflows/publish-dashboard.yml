@@ -36,12 +36,11 @@ jobs:
           MODELSCOPE_API_KEY: ${{ secrets.MODELSCOPE_API_KEY }}
         run: |
           python -m pip install -r requirements-cloud.txt
-          python scripts/modelscope_sync.py bootstrap --dist dist
-      - name: 读取最近指数行情并构建界面
+          python scripts/modelscope_sync.py bootstrap --dist dist --quote-cache source-cache/index-quotes.json
+      - name: 沿用已发布数据并构建界面
         run: |
           python -m unittest discover -s scripts -p 'test_insurance_snapshot.py'
           python -m unittest discover -s scripts -p 'test_modelscope_sync.py'
-          python scripts/refresh_index_quotes.py --require-any
           python scripts/build_cloud_site.py --output cloud-site --version "layout-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
       - name: 发布界面并验证全部文件
         env:
