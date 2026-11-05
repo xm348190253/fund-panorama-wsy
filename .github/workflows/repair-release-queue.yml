@@ -1,0 +1,42 @@
+name: 释放本次看板修复的发布队列
+on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/repair-release-queue.yml]
+permissions:
+  actions: write
+jobs:
+  release:
+    if: github.repository == 'xm348190253/fund-panorama-wsy' && github.event.repository.visibility == 'public'
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: 停止尚未进入发布阶段的旧采集任务
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python - <<'PY'
+          import json, os, urllib.request
+          base = 'https://api.github.com/repos/xm348190253/fund-panorama-wsy'
+          headers = {'Authorization': 'Bearer ' + os.environ['GH_TOKEN'], 'Accept': 'application/vnd.github+json'}
+          def get(path):
+              with urllib.request.urlopen(urllib.request.Request(base + path, headers=headers), timeout=30) as response:
+                  return json.load(response)
+          run_id = 41964529344
+          run = get('/actions/runs/' + str(run_id))
+          if run['status'] != 'in_progress':
+              print('The targeted old run is no longer running; no change.')
+              raise SystemExit(0)
+          if run['head_sha'] != '9a44b377784ad554378c8cfc8c6c6054f3340358' or run['path'] != '.github/workflows/daily-modelscope.yml':
+              raise SystemExit('Run identity changed; no cancellation.')
+          jobs = get('/actions/runs/' + str(run_id) + '/jobs')['jobs']
+          steps = [s for j in jobs if j['name'] == 'refresh' for s in j.get('steps', [])]
+          collecting = any(s['name'] == '全目录采集与校验（失败后同日断点重试一次）' and s['status'] == 'in_progress' for s in steps)
+          publishing = any(s['name'] == '发布到原魔搭空间并核验实际运行版本' and s['status'] != 'pending' for s in steps)
+          if not collecting or publishing:
+              print('The run has left collection; let publication finish normally.')
+              raise SystemExit(0)
+          request = urllib.request.Request(base + '/actions/runs/' + str(run_id) + '/cancel', headers=headers, method='POST')
+          with urllib.request.urlopen(request, timeout=30) as response:
+              print('Cancelled only the old unpublished collection:', response.status)
+          PY
