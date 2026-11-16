@@ -106,6 +106,21 @@ class CloudSiteTests(unittest.TestCase):
             build(self.root, self.output, 'test', self.node)
         self.assertEqual(note.read_text(), 'keep me')
 
+    def test_layout_build_reconciles_older_html_to_bootstrapped_shards(self):
+        value = read_snapshot(self.dist)
+        write_snapshot(self.dist, value, limit=500)
+        index = self.dist / 'index.html'
+        html = index.read_text()
+        import re
+        html = re.sub(r'\n?<script src="snapshot-perf-\d+\.js"></script>', '', html)
+        index.write_text(html.replace('<script src="snapshot.js"></script>',
+                                     '<script src="snapshot.js"></script>\n<script src="snapshot-perf-999.js"></script>'))
+        before = index.read_bytes()
+        build(self.root, self.output, 'bootstrap-shards', self.node)
+        self.assertEqual(read_snapshot(self.output), value)
+        self.assertNotIn('snapshot-perf-999.js', (self.output / 'index.html').read_text())
+        self.assertEqual(index.read_bytes(), before)
+
     def test_modified_owned_asset_is_not_overwritten(self):
         build(self.root, self.output, 'first', self.node)
         target = self.output / 'index.html'

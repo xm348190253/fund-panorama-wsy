@@ -111,6 +111,15 @@ def build(root, output, version, node='node'):
             (stage / name).write_bytes((dist / name).read_bytes())
         index = stage / 'index.html'
         html = restricted_html(index.read_text(), meta, same_origin_assets=True)
+        # Layout builds bootstrap data independently of frontend source HTML.
+        # Reconcile script references against this release's actual shards.
+        html = re.sub(r'\n?<script src="snapshot-perf-\d+\.js"></script>', '', html)
+        snapshot_marker = '<script src="snapshot.js"></script>'
+        if html.count(snapshot_marker) != 1:
+            raise ValueError('Snapshot bootstrap position is missing or ambiguous')
+        shard_scripts = '\n'.join(f'<script src="{name}"></script>' for name in names
+                                  if name.startswith('snapshot-perf-'))
+        html = html.replace(snapshot_marker, snapshot_marker + '\n' + shard_scripts)
         html = html.replace('内网快照', '云端快照').replace('"mode": "intranet"', '"mode": "cloud_snapshot"')
         # Embed the quote snapshot inside the hashed HTML; both hosted entries use this exact asset.
         quote_json = json.dumps(index_snapshot, ensure_ascii=False, separators=(',', ':'), allow_nan=False).replace('<', '\\u003c')
