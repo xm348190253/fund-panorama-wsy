@@ -8,6 +8,7 @@ import unittest
 
 from build_cloud_site import build, fingerprint, owned_output, ResourcePolicy
 from test_index_quotes import snapshot
+from snapshot_assets import read_snapshot, write_snapshot
 
 
 class CloudSiteTests(unittest.TestCase):
@@ -83,6 +84,19 @@ class CloudSiteTests(unittest.TestCase):
         owned_output(self.output)
         self.assertFalse((self.output / 'snapshot-perf-002.js').exists())
         self.assertEqual(json.loads((self.output / 'release.json').read_text())['version'], 'second')
+
+    def test_sharded_directory_survives_cloud_build_and_stays_below_host_limit(self):
+        value = read_snapshot(self.dist)
+        value['funds'][0]['name'] = 'Large directory metadata' * 600000
+        # Oversized individual rows fail before modifying the snapshot.
+        with self.assertRaises(ValueError):
+            write_snapshot(self.dist, value)
+        value['funds'][0]['name'] = 'Fund metadata' * 100
+        write_snapshot(self.dist, value, limit=2000)
+        report = build(self.root, self.output, 'sharded-directory', self.node)
+        self.assertEqual(report['directoryCount'], 2)
+        self.assertEqual(read_snapshot(self.output), value)
+        self.assertTrue(all(p.stat().st_size < 10 * 1024 * 1024 for p in self.output.iterdir()))
 
     def test_unknown_user_files_are_not_removed(self):
         self.output.mkdir()

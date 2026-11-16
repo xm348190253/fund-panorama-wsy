@@ -9,6 +9,7 @@ import shutil
 import tempfile
 import zipfile
 
+from snapshot_assets import read_snapshot
 from package_delivery import AssetReferences, eligible
 from package_local import restricted_html, snapshot_metadata
 
@@ -53,20 +54,11 @@ def validate_site(site, meta):
     present = sorted(path.name for path in site.glob('snapshot-perf-*.js'))
     if not listed or listed != present or listed != [f'snapshot-perf-{i:03d}.js' for i in range(1, len(listed) + 1)]:
         raise ValueError('Intranet snapshot shard references are incomplete')
-    snapshot = json.loads((site / 'snapshot.js').read_text().split('=', 1)[1].strip().removesuffix(';'))
+    snapshot = read_snapshot(site)
     codes = {p['code'] for p in snapshot['funds']}
     if len(codes) != len(snapshot['funds']) or len(codes) != meta['directoryCount']:
         raise ValueError('Directory counts disagree')
     perf = set(snapshot.get('perf') or {})
-    for name in listed:
-        text = (site / name).read_text()
-        prefix = 'Object.assign(window.MARKET_SNAPSHOT.perf,'
-        if not text.startswith(prefix) or not text.rstrip().endswith(');'):
-            raise ValueError('Invalid snapshot shard: ' + name)
-        chunk = json.loads(text[len(prefix):].strip().removesuffix(');'))
-        if perf.intersection(chunk):
-            raise ValueError('Duplicate code across shards: ' + name)
-        perf.update(chunk)
     if perf != codes or meta.get('collection', {}).get('attempted') != len(codes):
         raise ValueError('Intranet snapshot does not include every processed directory code')
     return {'directoryCount': len(codes), 'snapshotShards': listed}

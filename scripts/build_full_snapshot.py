@@ -14,6 +14,7 @@ import hashlib
 import json
 from pathlib import Path, PurePosixPath
 import re
+from snapshot_assets import read_snapshot, write_snapshot
 from inception_metadata import apply_inception, load_profiles, valid_date, enforce_inception_intervals
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -184,12 +185,7 @@ def validate_collection(directory, manifest, base, codes, as_of):
 
 
 def load_snapshot():
-    source = (ROOT / 'dist/snapshot.js').read_text()
-    snapshot = json.loads(source.split('=', 1)[1].strip().rstrip(';'))
-    for part in sorted((ROOT / 'dist').glob('snapshot-perf-*.js')):
-        body = part.read_text().split('Object.assign(window.MARKET_SNAPSHOT.perf,', 1)[1].strip()
-        snapshot['perf'].update(json.loads(body.removesuffix(');').strip()))
-    return snapshot
+    return read_snapshot(ROOT / 'dist')
 
 
 def family_name(name):
@@ -296,27 +292,8 @@ def build(args):
             'metadataFile': str(profiles_path.relative_to(ROOT)),
             'metadataSha256': hashlib.sha256(profiles_path.read_bytes()).hexdigest()}
     meta['errors'] = base.get('errors', [])
-    snapshot = {'meta': meta, 'funds': funds, 'perf': {}, 'details': details, 'realtime': {}}
-    (ROOT / 'dist/snapshot.js').write_text('window.MARKET_SNAPSHOT=' + compact(snapshot) + ';\n')
-    chunks, chunk, size = [], {}, 0
-    for code, value in perf.items():
-        row_size = len(compact({code: value}).encode())
-        if chunk and size + row_size > 4_000_000:
-            chunks.append(chunk); chunk, size = {}, 0
-        chunk[code] = value; size += row_size
-    if chunk:
-        chunks.append(chunk)
-    for part in (ROOT / 'dist').glob('snapshot-perf-*.js'):
-        part.unlink()
-    files = []
-    for i, chunk in enumerate(chunks, 1):
-        name = f'snapshot-perf-{i:03d}.js'
-        (ROOT / 'dist' / name).write_text('Object.assign(window.MARKET_SNAPSHOT.perf,' + compact(chunk) + ');\n')
-        files.append(name)
-    html_path = ROOT / 'dist/index.html'
-    html = re.sub(r'\n?<script src="snapshot-perf-\d+\.js"></script>', '', html_path.read_text())
-    html = html.replace('<script src="snapshot.js"></script>', '<script src="snapshot.js"></script>\n' + '\n'.join(f'<script src="{f}"></script>' for f in files))
-    html_path.write_text(html)
+    snapshot = {'meta': meta, 'funds': funds, 'perf': perf, 'details': details, 'realtime': {}}
+    files = write_snapshot(ROOT / 'dist', snapshot)
     write(ROOT / 'docs/data-audit.json', meta)
     with (ROOT / 'docs/detail-evidence.jsonl').open('w') as output:
         for item in audit:

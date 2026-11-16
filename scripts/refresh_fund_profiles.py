@@ -6,6 +6,7 @@ dates stay missing unless the overview explicitly identifies the requested code.
 """
 from __future__ import annotations
 
+from snapshot_assets import read_snapshot
 import argparse
 from collections import Counter
 import concurrent.futures as cf
@@ -190,12 +191,14 @@ def write_audit(result):
 def run(args):
     snapshot_file = ROOT / 'dist/snapshot.js'
     snapshot_raw = snapshot_file.read_bytes()
-    snapshot = json.loads(snapshot_raw.decode().split('=', 1)[1].strip().rstrip(';'))
+    snapshot = read_snapshot(ROOT / 'dist')
     known = {p['code']: p for p in snapshot['funds']}
     directory = Path(args.directory) if args.directory else ROOT / 'source-cache/current-directory.json'
     base = Path(args.base_refresh) if args.base_refresh else ROOT / 'source-cache' / ('base-refresh-' + args.as_of.replace('-', '') + '.json')
     all_funds = dict(known)
-    input_evidence = {'snapshot': hashlib.sha256(snapshot_raw).hexdigest()}
+    input_evidence = {'snapshot': hashlib.sha256(snapshot_raw).hexdigest(),
+                      'snapshotShards': {p.name: hashlib.sha256(p.read_bytes()).hexdigest()
+                                         for p in sorted((ROOT / 'dist').glob('snapshot-perf-*.js'))}}
     if directory.exists():
         directory_raw = directory.read_bytes()
         directory_data = json.loads(directory_raw)

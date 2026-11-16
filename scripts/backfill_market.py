@@ -6,6 +6,7 @@ records provenance and field-specific reasons; missing values never become zero.
 """
 from __future__ import annotations
 
+from snapshot_assets import read_snapshot
 import argparse
 import bisect
 import calendar
@@ -420,8 +421,7 @@ def _download_identity(url, timeout, max_bytes):
 
 
 def load_funds(directory, base_refresh=None, profiles_path=None, as_of=None):
-    baseline_text = (ROOT / 'dist/snapshot.js').read_text()
-    baseline = json.loads(baseline_text.split('=', 1)[1].strip().rstrip(';'))
+    baseline = read_snapshot(ROOT / 'dist')
     known = {p['code']: p for p in baseline['funds']}
     inceptions = {}
     if base_refresh and Path(base_refresh).exists():

@@ -16,6 +16,7 @@ from urllib.parse import unquote, urlsplit
 import zipfile
 
 from package_local import SHARE
+from snapshot_assets import read_snapshot
 
 ROOT = Path(__file__).resolve().parents[1]
 ARCHIVE_ROOT = 'fund-panorama'
@@ -77,11 +78,7 @@ def validate_sources(root):
     expected = [f'snapshot-perf-{i:03d}.js' for i in range(1, len(listed) + 1)]
     if listed != expected:
         raise ValueError('Snapshot shards must be listed once in consecutive order')
-    source = (root / 'dist/snapshot.js').read_text()
-    prefix = 'window.MARKET_SNAPSHOT='
-    if not source.startswith(prefix) or not source.rstrip().endswith(';'):
-        raise ValueError('Main snapshot structure is invalid')
-    snapshot = json.loads(source[len(prefix):].strip().removesuffix(';'))
+    snapshot = read_snapshot(root / 'dist')
     codes = [item['code'] for item in snapshot['funds']]
     if not codes or len(codes) != len(set(codes)) or any(not re.fullmatch(r'\d{6}', code) for code in codes):
         raise ValueError('Snapshot directory codes are empty, malformed, or duplicated')
@@ -99,15 +96,6 @@ def validate_sources(root):
             raise ValueError('Offline HTML does not embed the current asset: ' + filename)
         if '<script>' + escaped + '</script>' not in shared:
             raise ValueError('Sharing HTML does not embed the current asset: ' + filename)
-        if filename == 'snapshot.js':
-            continue
-        prefix = 'Object.assign(window.MARKET_SNAPSHOT.perf,'
-        if not content.startswith(prefix) or not content.rstrip().endswith(');'):
-            raise ValueError('Snapshot shard structure is invalid: ' + filename)
-        chunk = json.loads(content[len(prefix):].strip().removesuffix(');'))
-        if set(combined).intersection(chunk):
-            raise ValueError('Duplicate performance code across snapshot shards: ' + filename)
-        combined.update(chunk)
     if set(combined) != set(codes):
         raise ValueError('Snapshot shards do not cover every directory code exactly once')
     collection = snapshot['meta'].get('collection', {})

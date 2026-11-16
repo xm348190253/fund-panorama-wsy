@@ -18,7 +18,7 @@ from refresh_index_quotes import validate_snapshot
 ROOT = Path(__file__).resolve().parents[1]
 ASSET = re.compile(r'(?:index\.html|market\.js|echarts\.min\.js|snapshot(?:-perf-\d{3})?\.js)')
 MANIFEST = 'release.json'
-MAX_ASSET_BYTES = 25 * 1024 * 1024
+MAX_ASSET_BYTES = 10 * 1024 * 1024
 ADMIN_URL = 'https://github.com/xm348190253/fund-panorama-wsy/actions/workflows/daily-modelscope.yml'
 
 
@@ -153,7 +153,7 @@ def build(root, output, version, node='node'):
         syntax = validate_scripts(stage, node)
         files = {name: fingerprint(stage / name) for name in names}
         if any(info['bytes'] >= MAX_ASSET_BYTES for info in files.values()):
-            raise ValueError('A static asset reaches the 25 MiB per-file limit')
+            raise ValueError('A static asset reaches the 10 MiB ModelScope ordinary-file limit')
         release = {'version': version, 'dataDate': data_date,
                    'generatedAt': dt.datetime.now(ZoneInfo('Asia/Shanghai')).isoformat(timespec='seconds'),
                    'indexQuotesCollectedAt': index_snapshot['collectedAt'],

@@ -44,6 +44,7 @@ jobs:
           REQUEST_QUOTES_ONLY: ${{ inputs.quotes_only }}
         run: |
           python scripts/test_cloud_refresh_gate.py
+          python scripts/test_snapshot_assets.py
           python scripts/cloud_refresh_gate.py --preflight
   refresh:
     needs: preflight
