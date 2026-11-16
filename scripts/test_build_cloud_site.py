@@ -63,6 +63,8 @@ class CloudSiteTests(unittest.TestCase):
         self.assertIn('数据快照 2026-10-29', html)
         self.assertIn('每天北京时间 08:00 计划开始采集', html)
         self.assertIn('共用云端版本 test-1', html)
+        for name in ('snapshot.js', 'snapshot-perf-001.js', 'snapshot-perf-002.js', 'market.js'):
+            self.assertIn('src="' + name + '?release=test-1"', html)
         self.assertIn('立即更新（管理员）', html)
         self.assertIn('if(anchor.href===', html)
         self.assertIn('刷新读取最新已成功发布版本', html)

@@ -154,6 +154,11 @@ def build(root, output, version, node='node'):
             ui = insurance_ui.read_text(encoding='utf-8').replace('</script', '<\\/script')
             html = html.replace('</body>', '<script id="insurance-dashboard-bootstrap">' + ui + '</script></body>', 1)
             index.write_text(html, encoding='utf-8')
+        # A layout URL can change while browsers still cache the old data scripts.
+        # Bind every mutable script request to this release, after local validation.
+        html = re.sub(r'(<script\s+src=")(snapshot(?:-perf-\d{3})?\.js|market\.js)(")',
+                      lambda m: m[1] + m[2] + '?release=' + version + m[3], html)
+        index.write_text(html, encoding='utf-8')
         policy = ResourcePolicy()
         policy.feed(html)
         expected_connect = "connect-src 'self'" if insurance_ui.is_file() else "connect-src 'none'"

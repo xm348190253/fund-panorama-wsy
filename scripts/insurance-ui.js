@@ -71,7 +71,7 @@
       for(const name of names.filter(n=>n.endsWith('.js')))urls[name]=URL.createObjectURL(new Blob([buffers[name]],{type:'text/javascript'}));
       let html=new TextDecoder().decode(buffers['index.html']);
       html=html.replace("script-src 'self' 'unsafe-inline'","script-src 'self' 'unsafe-inline' blob:").replace('script-src &#x27;self&#x27; &#x27;unsafe-inline&#x27;','script-src &#x27;self&#x27; &#x27;unsafe-inline&#x27; blob:');
-      html=html.replace(/(<script\s+src=")(snapshot(?:-perf-\d{3})?\.js|market\.js)("\s*>)/g,(_,a,n,z)=>a+urls[n]+z).replace(/href="echarts\.min\.js"/g,'href="'+urls['echarts.min.js']+'"').replace(/window\.__echartsTries\s*=\s*\[[\s\S]*?\];/,'window.__echartsTries=['+JSON.stringify(urls['echarts.min.js'])+'];');
+      html=html.replace(/(<script\s+src=")(snapshot(?:-perf-\d{3})?\.js|market\.js)(?:\?release=[\w.-]+)?("\s*>)/g,(_,a,n,z)=>a+urls[n]+z).replace(/href="echarts\.min\.js"/g,'href="'+urls['echarts.min.js']+'"').replace(/window\.__echartsTries\s*=\s*\[[\s\S]*?\];/,'window.__echartsTries=['+JSON.stringify(urls['echarts.min.js'])+'];');
       const parsed=new DOMParser().parseFromString(html,'text/html'),verifiedUrls=new Set(Object.values(urls));
       if([...parsed.querySelectorAll('script[src]')].some(script=>!verifiedUrls.has(script.getAttribute('src'))))throw new Error('公募页面存在未校验的脚本引用');
       html=html.replace('<head>','<head><script>window.__INSURANCE_FUND_ONLY__=true;</'+'script>');
