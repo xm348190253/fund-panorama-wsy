@@ -1812,6 +1812,7 @@ function renderTree(){
   }).filter(Boolean);
 
   const T=ct();
+  const treeLabel=document.documentElement.dataset.theme==='light'?'#22201C':'#fff';
   treeChart.setOption({
     backgroundColor:'transparent',
     graphic: familyUnits.length ? [] : [emptyChartGraphic('未找到符合条件的产品\n请调整筛选或搜索关键词')],
@@ -1843,27 +1844,27 @@ function renderTree(){
         { itemStyle:{gapWidth:3, borderWidth:0, borderRadius:8} },
         // L1 一级大类 —— 顶栏窄而清晰
         { itemStyle:{gapWidth:2, borderColor:T.treeBorder, borderWidth:2, borderRadius:6},
-          upperLabel:{show:true, height:22, color:'#fff', fontWeight:700, fontSize:12, padding:[0,8,0,10],
-            backgroundColor:'rgba(0,0,0,0.22)',
+          upperLabel:{show:true, height:22, color:treeLabel, fontWeight:700, fontSize:12, padding:[0,8,0,10],
+            backgroundColor:T.treeUpper,
             formatter: p=>{
               if(!p.data) return p.name||'';
               return (p.data.l1Key||p.name||'') + '  ·  ' + (p.data.count||0) + ' 只';
             } },
-          emphasis:{ upperLabel:{color:'#fff'} } },
+          emphasis:{ upperLabel:{color:treeLabel} } },
         // L2 二级策略 —— 顶栏更紧凑
         { itemStyle:{gapWidth:1, borderColor:T.treeBorder, borderWidth:1, borderRadius:5},
-          upperLabel:{show:true, height:16, color:'rgba(255,255,255,0.88)', fontWeight:500, fontSize:10.5, padding:[0,6,0,8],
-            backgroundColor:'rgba(0,0,0,0.12)',
+          upperLabel:{show:true, height:16, color:treeLabel, fontWeight:500, fontSize:10.5, padding:[0,6,0,8],
+            backgroundColor:T.treeUpper2,
             formatter: p=>{
               if(!p.data) return p.name||'';
               return (p.data.l2Key||p.name||'') + '  ·  ' + (p.data.count||0) + ' 只';
             } },
-          emphasis:{ upperLabel:{color:'#fff'} } },
+          emphasis:{ upperLabel:{color:treeLabel} } },
         // L3 三级细分（叶子）—— 纯文本两行，ECharts 才能正确居中
         { itemStyle:{gapWidth:1, borderWidth:0, borderRadius:4},
           label:{
             show:true,
-            color:'#fff',
+            color:treeLabel,
             fontSize:12,
             fontWeight:500,
             align:'center',
