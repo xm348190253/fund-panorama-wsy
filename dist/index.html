@@ -115,7 +115,7 @@ html{transition:background .35s ease,color .35s ease}
 body{background-image:var(--page-grad);min-height:100vh;padding-bottom:60px;transition:background-color .35s ease}
 
 /* Header */
-.topbar{display:flex;align-items:center;justify-content:space-between;padding:18px 28px;border-bottom:1px solid var(--glass-border);background:var(--glass-solid);backdrop-filter:blur(var(--blur)) saturate(180%);-webkit-backdrop-filter:blur(var(--blur)) saturate(180%);position:sticky;top:0;z-index:50;box-shadow:0 1px 0 var(--glass-hi) inset,var(--shadow-1)}
+.topbar{display:flex;align-items:center;justify-content:space-between;padding:18px 28px;border-bottom:1px solid var(--glass-border);background:var(--glass-solid);backdrop-filter:blur(var(--blur)) saturate(180%);-webkit-backdrop-filter:blur(var(--blur)) saturate(180%);position:relative;z-index:50;box-shadow:0 1px 0 var(--glass-hi) inset,var(--shadow-1)}
 .theme-toggle{background:var(--glass-bg);border:1px solid var(--glass-border);color:var(--text-2);width:34px;height:34px;border-radius:50%;cursor:pointer;font-size:15px;display:flex;align-items:center;justify-content:center;font-family:inherit;transition:transform .2s ease,box-shadow .2s ease,color .2s ease;backdrop-filter:blur(var(--blur))}
 .theme-toggle:hover{color:var(--text-1);transform:translateY(-1px);box-shadow:var(--shadow-1)}
 .brand{display:flex;align-items:center;gap:14px}
@@ -301,10 +301,10 @@ body{background-image:var(--page-grad);min-height:100vh;padding-bottom:60px;tran
 .ticker-bar::-webkit-scrollbar{display:none}
 .ticker-label{font-size:10px;color:var(--text-4);font-weight:600;letter-spacing:1.5px;text-transform:uppercase;flex-shrink:0;min-width:64px}
 .ticker-track-wrap{overflow:hidden;flex:1;min-width:0}
-.ticker-items{display:flex;gap:18px;flex-wrap:nowrap;width:max-content;min-width:100%;will-change:transform}
+.ticker-items{display:flex;gap:36px;flex-wrap:nowrap;width:max-content;will-change:transform}.ticker-cycle{display:flex;gap:28px;flex-shrink:0}
 .ticker-items.is-static{width:100%}
 .ticker-items.is-marquee{animation:ticker-marquee var(--ticker-duration,28s) linear infinite}
-.ticker-items.is-marquee:hover{animation-play-state:paused}
+.ticker-items.is-marquee:focus-within{animation-play-state:paused}
 .ticker-marquee-gap{display:inline-block;width:36px;flex:0 0 36px}
 @keyframes ticker-marquee{0%{transform:translateX(0)}100%{transform:translateX(calc(-1 * var(--ticker-shift,0px)))}}
 .ticker-item{display:inline-flex;flex-direction:column;align-items:flex-start;gap:3px;font-size:12px;flex-shrink:0;padding:0 4px}
@@ -401,7 +401,7 @@ body{background-image:var(--page-grad);min-height:100vh;padding-bottom:60px;tran
 /* 手机竖屏：隐藏次要信息，主体内容优先 */
 @media (max-width:480px){.kpi-grid{grid-template-columns:1fr}.kpi-value{font-size:23px}.ds-stack{display:none}.legend-group{display:none}.chart-box{height:320px}#searchBox{width:130px}.panel-hint{max-width:100%}}
 
-.kpi-grid{grid-template-columns:repeat(5,minmax(0,1fr))}
+.kpi-grid{grid-template-columns:repeat(4,minmax(0,1fr))}
 #healthPanel{max-width:100vw}
 .kpi-value{font-size:26px}.kpi-sub{min-height:34px;line-height:1.6}
 .page-controls{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;padding:14px 18px;border-top:1px solid var(--border-soft);font-size:12px;color:var(--text-3)}
@@ -410,7 +410,19 @@ body{background-image:var(--page-grad);min-height:100vh;padding-bottom:60px;tran
 .offline-note{font-size:11px;color:var(--gold);padding:0 28px;min-height:0;line-height:1.8}.offline-note:empty{display:none}
 button:focus-visible,input:focus-visible,a:focus-visible,select:focus-visible{outline:2px solid var(--teal);outline-offset:3px}
 @media(max-width:1200px){.topbar-right{gap:12px}.legend-group{display:none}.kpi-grid{grid-template-columns:repeat(3,minmax(0,1fr))}.topbar-date{display:none}}
-@media(max-width:760px){.topbar{position:relative;align-items:flex-start;padding:14px 16px;gap:12px}.brand-sub{display:none}.brand-tag{font-size:10px}.brand-mark{width:32px;height:32px;flex-shrink:0}.brand-title{font-size:16px}.topbar-right{flex-wrap:wrap;justify-content:flex-end;gap:7px;max-width:160px}.ds-stack{width:100%;font-size:10px;order:5}.ds-row:nth-child(2),.ds-row:nth-child(4),.ds-row:nth-child(5){display:none}.chip-bar{padding:12px 16px}.chip{font-size:12px;padding:6px 10px}.chip-bar-label{width:100%;min-width:0}.kpi-grid{padding:14px 16px 0;gap:10px;grid-template-columns:repeat(2,minmax(0,1fr))}.kpi-card{padding:14px}.kpi-value{font-size:24px}.kpi-card:last-child{grid-column:1 / -1}.main-grid{padding:12px 16px 0;grid-template-columns:1fr}.panel-table{margin:12px 16px 0}.chart-box{height:330px}.drawer{width:min(100vw,680px)}.footer-note,.offline-note{padding-left:16px;padding-right:16px}.topbar-right #themeToggle{border-radius:10px}}
+@media(max-width:760px){.topbar{position:relative;align-items:flex-start;padding:14px 16px;gap:12px}.brand-sub{display:none}.brand-tag{font-size:10px}.brand-mark{width:32px;height:32px;flex-shrink:0}.brand-title{font-size:16px}.topbar-right{flex-wrap:wrap;justify-content:flex-end;gap:7px;max-width:160px}.ds-stack{width:100%;font-size:10px;order:5}.ds-row:nth-child(2),.ds-row:nth-child(4),.ds-row:nth-child(5){display:none}.chip-bar{padding:12px 16px}.chip{font-size:12px;padding:6px 10px}.chip-bar-label{width:100%;min-width:0}.kpi-grid{padding:14px 16px 0;gap:10px;grid-template-columns:repeat(2,minmax(0,1fr))}.kpi-card{padding:14px}.kpi-value{font-size:24px}.main-grid{padding:12px 16px 0;grid-template-columns:1fr}.panel-table{margin:12px 16px 0}.chart-box{height:330px}.drawer{width:min(100vw,680px)}.footer-note,.offline-note{padding-left:16px;padding-right:16px}.topbar-right #themeToggle{border-radius:10px}}
+
+/* Product details use a consistent centered grid. */
+.ptable{table-layout:fixed;min-width:1900px}
+.ptable thead th,.ptable thead th.num,.ptable tbody td,.ptable tbody td.num{text-align:center;vertical-align:middle;padding:14px 12px;white-space:normal;line-height:1.6;overflow-wrap:anywhere}
+.ptable thead th{width:120px}
+.ptable thead th:first-child{width:290px}
+.ptable thead th:nth-child(2){width:170px}
+.ptable thead th:nth-child(6),.ptable thead th:nth-child(7){width:180px}
+.ptable thead th:last-child{width:135px}
+.ptable .cell-name{white-space:normal;line-height:1.6}
+.ptable .cell-code{display:block;margin-top:4px;white-space:normal}
+
 </style>
 </head>
 <body>
@@ -516,11 +528,6 @@ button:focus-visible,input:focus-visible,a:focus-visible,select:focus-visible{ou
     <div class="kpi-value"><span id="kpiSharpe">--</span></div>
     <div class="kpi-sub" id="kpiSharpeSub">&nbsp;</div>
   </div>
-  <div class="kpi-card">
-    <div class="kpi-label">数据完整度</div>
-    <div class="kpi-value"><span id="kpiHealth">--</span><span class="kpi-unit">%</span></div>
-    <div class="kpi-sub" id="kpiHealthSub">&nbsp;</div>
-  </div>
 </section>
 
 <section class="main-grid">
@@ -557,8 +564,8 @@ button:focus-visible,input:focus-visible,a:focus-visible,select:focus-visible{ou
           <th data-sort="l1">投资类型</th>
           <th data-sort="fundSubtype">产品形态</th>
           <th data-sort="scale" class="num">规模（亿元）</th>
-          <th data-sort="d1" class="num" title="非货币基金：最新披露净值增长率(%)；货币基金：每万份收益(元)">最新日表现（非货币 % / 货币 元）</th>
-          <th data-sort="w1" class="num" title="非货币基金：来源近一周区间收益，或按最近5个净值观察区间回算（6点跨度不超过14天）。货币基金：七日年化收益率，不是近一周实得收益。点击后按非货币、货币分组排序，各组内比较对应指标。">近一周累计（非货币）/七日年化（货币）（%）</th>
+          <th data-sort="d1" class="num" title="非货币基金：最新披露净值增长率(%)；货币基金：每万份收益(元)">最新日表现<br>非货币（%）<br>货币（元）</th>
+          <th data-sort="w1" class="num" title="非货币基金：来源近一周区间收益，或按最近5个净值观察区间回算（6点跨度不超过14天）。货币基金：七日年化收益率，不是近一周实得收益。点击后按非货币、货币分组排序，各组内比较对应指标。">近一周累计（非货币）<br>七日年化（货币）<br>（%）</th>
           <th data-sort="m1" class="num" title="近一月收益率：公开区间收益，或历史足够时按收益序列计算">近一月(%)</th>
           <th data-sort="y1" class="num" title="近一年收益率：须具备相应区间历史">近一年(%)</th>
           <th data-sort="ytd" class="num" title="今年以来收益率：公开今年收益，或以上年末为基准计算；本年成立产品使用成立以来区间">今年以来(%)</th>
@@ -1335,30 +1342,30 @@ async function loadIndexQuotes(){
   }
 }
 
+let tickerAnimationFrame;
 function enableTickerMarquee(){
   const wrap = document.getElementById('tickerItems');
   const viewport = wrap && wrap.parentElement;
   if(!wrap || !viewport) return;
+  if(!wrap._resizeObserver && typeof ResizeObserver !== 'undefined'){
+    wrap._resizeObserver = new ResizeObserver(enableTickerMarquee);
+    wrap._resizeObserver.observe(viewport);
+  }
+  if(tickerAnimationFrame) cancelAnimationFrame(tickerAnimationFrame);
   const baseHtml = wrap.dataset.baseHtml || wrap.innerHTML;
   wrap.classList.remove('is-marquee','is-static');
-  wrap.style.removeProperty('--ticker-shift');
-  wrap.style.removeProperty('--ticker-duration');
-  wrap.innerHTML = baseHtml;
-
-  requestAnimationFrame(()=>{
-    const contentWidth = wrap.scrollWidth;
-    const viewportWidth = viewport.clientWidth;
-    if(contentWidth <= viewportWidth + 4){
-      wrap.classList.add('is-static');
-      return;
-    }
-    const gapWidth = 36;
-    wrap.innerHTML = baseHtml + '<span class="ticker-marquee-gap" aria-hidden="true"></span>' + baseHtml;
-    wrap.style.setProperty('--ticker-shift', (contentWidth + gapWidth) + 'px');
-    wrap.style.setProperty('--ticker-duration', Math.max(24, Math.round((contentWidth + gapWidth) / 38)) + 's');
+  wrap.innerHTML = '<span class="ticker-cycle">'+baseHtml+'</span>';
+  tickerAnimationFrame = requestAnimationFrame(()=>{
+    if(viewport.clientWidth === 0) return;
+    const width = wrap.firstElementChild.getBoundingClientRect().width;
+    if(width <= 0) return;
+    wrap.innerHTML += '<span class="ticker-cycle" aria-hidden="true">'+baseHtml+'</span>';
+    wrap.style.setProperty('--ticker-shift', (width + 36) + 'px');
+    wrap.style.setProperty('--ticker-duration', Math.max(30, Math.round((width + 36) / 48)) + 's');
     wrap.classList.add('is-marquee');
   });
 }
+window.addEventListener('resize', enableTickerMarquee);
 
 function renderTicker(){
   const items = DS.indexQuotes;

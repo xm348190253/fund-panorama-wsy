@@ -484,7 +484,6 @@ renderKpi=function(){
   const marketTotal=SNAP.meta.marketTotal||{},total=finite(marketTotal.totalTrillionYuan);
   const knownCompanies=list.filter(p=>p.companyId),companies=new Set(knownCompanies.map(p=>p.companyId));
   const returns=list.map(p=>(DS.perfMap[p.code]||{}).y1).filter(v=>finite(v)!=null);
-  const loaded=list.filter(p=>finite((DS.perfMap[p.code]||{}).m1)!=null).length;
   const text=(id,value)=>{const el=document.getElementById(id);if(el)el.textContent=value;};
   text('kpiCompanies',companies.size?companies.size.toLocaleString('zh-CN'):'--');
   text('kpiCompaniesSub','公司归属已核验 '+knownCompanies.length.toLocaleString('zh-CN')+' / '+list.length.toLocaleString('zh-CN')+' 只展示产品');
@@ -500,8 +499,6 @@ renderKpi=function(){
   text('kpiCountSub',(STATE.showAllShares?'按份额代码计数':'按基金家族去重')+' · 当前筛选结果');
   text('kpiSharpe',returns.length?fmt.signed(returns.reduce((a,b)=>a+b,0)/returns.length,2)+'%':'--');
   text('kpiSharpeSub','等权平均 · 已有近一年收益 '+returns.length+' / '+list.length+' 只');
-  text('kpiHealth',list.length?Math.round(loaded/list.length*100):0);
-  text('kpiHealthSub','近期业绩覆盖 '+loaded.toLocaleString('zh-CN')+' / '+list.length.toLocaleString('zh-CN')+' 只');
 };
 updateTableHint=function(){
   const list=filteredProducts(),dates=list.map(p=>(DS.perfMap[p.code]||{}).jzrq).filter(Boolean).sort();
