@@ -136,9 +136,9 @@
     const bars=types.map(r=>{const category=r.name==='固定收益类'?cats[0]:r.name;return '<button class="bar-row type-bar" data-chart-category="'+esc(category)+'" aria-label="查看'+esc(r.name)+'规模收益图"><span class="bar-label">'+esc(r.name)+' <small>↗</small></span><span class="bar-track"><span class="bar-fill" style="display:block;width:'+r.share*100+'%;background:'+colors[cats.indexOf(category)]+'"></span></span><span class="bar-value">'+fmt(r.size)+'<small>'+pct(r.share)+'</small></span></button>';}).join('');
     const summary='<ul class="summary-list">'+d.report.sections[0].text.map(t=>'<li>'+esc(t)+'</li>').join('')+'</ul>';
     return '<div class="panel-grid">'+panel('产品类型与规模分布',bars,'行业全口径，包含开放式与封闭式产品。点击类型查看下方开放式产品规模收益图；固定收益默认显示非货币类，可另选货币类。')+panel('本期统计摘要',summary)+'</div>'+typeChart()+
-      panel('行业规模与结构',table(['产品类型','产品只数','规模','占比','原表环比','较上期规模增减'],d.types.map(r=>[esc(r.name),fmt(r.count,0),fmt(r.size),pct(r.share),numericPct(r.mom),numeric(r.change)])),'较上期：'+(d.priorMonth||'未取得')+' → '+d.month+'；环比取自报告原表。')+
-      panel('管理机构规模排名','<div class="scope-note manager-source">来源：《组合行情》报告第2表“机构管理规模”的“合计（亿元）”列。采用行业全口径（含开放式、封闭式产品），不是开放式披露产品清单加总。</div>'+table(['排名 / 管理机构','净资产规模','行业份额','较上期增减','较上年末增减'],d.managers.map(r=>['<span class="rank">'+r.rank+'</span>　'+esc(r.manager),fmt(r.total),pct(r.share),numeric(r.change),numeric(r.ytdChange)])),'机构份额使用原表规模除以行业总规模；上年末比较期：'+(d.baselineMonth||'未取得')+'。')+
-      panel('持有人资金来源',table(['资金来源','规模','占比','较上期占比变化 / 百分点','年初以来规模增幅'],d.holders.map(r=>[esc(r.name),fmt(r.size),pct(r.share),numeric(r.shareChange==null?null:r.shareChange*100),pct(r.ytdGrowth)])),'业内、业外及其细分行按原表层级呈现，完整结构见月报。');
+      panel('行业规模与结构',table(['产品类型','产品数量（只）','净资产规模（亿元）','规模占比（%）','原表环比（%）','较上期规模增减（亿元）'],d.types.map(r=>[esc(r.name),fmt(r.count,0),fmt(r.size),pct(r.share),numericPct(r.mom),numeric(r.change)])),'较上期：'+(d.priorMonth||'未取得')+' → '+d.month+'；环比取自报告原表。')+
+      panel('管理机构规模排名','<div class="scope-note manager-source">来源：《组合行情》报告第2表“机构管理规模”的“合计（亿元）”列。采用行业全口径（含开放式、封闭式产品），不是开放式披露产品清单加总。</div>'+table(['排名 / 管理机构','净资产规模（亿元）','行业份额（%）','较上期增减（亿元）','较上年末增减（亿元）'],d.managers.map(r=>['<span class="rank">'+r.rank+'</span>　'+esc(r.manager),fmt(r.total),pct(r.share),numeric(r.change),numeric(r.ytdChange)])),'机构份额使用原表规模除以行业总规模；上年末比较期：'+(d.baselineMonth||'未取得')+'。')+
+      panel('持有人资金来源',table(['资金来源','规模（亿元）','占比（%）','较上期占比变化（百分点）','年初以来规模增幅（%）'],d.holders.map(r=>[esc(r.name),fmt(r.size),pct(r.share),numeric(r.shareChange==null?null:r.shareChange*100),pct(r.ytdGrowth)])),'业内、业外及其细分行按原表层级呈现，完整结构见月报。');
   }
   function chartRows(category=state.chartCategory){const key=category===cats[3]?'annualized':'ytd';return state.data.products.filter(r=>r.category===category&&Number.isFinite(r[key])&&Number.isFinite(r.size)&&r.size>0);}
   function typeChart(){
@@ -170,9 +170,9 @@
   }
   function risk(){
     const d=state.data;
-    return panel('收益分布与同类比较',table(['产品类别','样本数','YTD有效样本','本月均值','YTD均值','YTD中位数','YTD最高','YTD最低'],d.returns.map(r=>[esc(r.category),r.count,r.valid,r.money?'未披露':pct(r.monthly),pct(r.mean),pct(r.median),pct(r.max),pct(r.min)])),'均值为披露样本简单平均。货币类YTD列为年化收益，其余为累计收益；各类别分别比较。')+
+    return panel('收益分布与同类比较',table(['产品类别','样本数量（只）','YTD有效样本（只）','本月均值（%）','YTD均值（%）','YTD中位数（%）','YTD最高（%）','YTD最低（%）'],d.returns.map(r=>[esc(r.category),r.count,r.valid,r.money?'未披露':pct(r.monthly),pct(r.mean),pct(r.median),pct(r.max),pct(r.min)])),'均值为披露样本简单平均。货币类YTD列为年化收益，其余为累计收益；各类别分别比较。')+
       typeChart()+
-      panel('开放式非货币固收 · 机构比较',table(['管理机构','样本规模','产品数','较上期增减','本月收益均值','YTD收益均值'],d.sampleManagers.map(r=>[esc(r.manager),fmt(r.size),r.count,numeric(r.change),pct(r.monthly),pct(r.ytd)])),'本表为开放式报告实际披露样本；跨期规模增减包含清单变化。');
+      panel('开放式非货币固收 · 机构比较',table(['管理机构','样本规模（亿元）','产品数量（只）','较上期增减（亿元）','本月收益均值（%）','YTD收益均值（%）'],d.sampleManagers.map(r=>[esc(r.manager),fmt(r.size),r.count,numeric(r.change),pct(r.monthly),pct(r.ytd)])),'本表为开放式报告实际披露样本；跨期规模增减包含清单变化。');
   }
   function filtered(){
     let a=state.data.products.filter(r=>(!state.category||r.category===state.category)&&(!state.manager||r.manager===state.manager)&&(!state.search||(r.name+r.manager+r.id).toLowerCase().includes(state.search.toLowerCase())));
@@ -180,7 +180,7 @@
   }
   function productTable(){
     const a=filtered(),pages=Math.max(1,Math.ceil(a.length/25));state.pageNo=Math.min(state.pageNo,pages);const shown=a.slice((state.pageNo-1)*25,state.pageNo*25);
-    return table(['产品名称 / 产品ID','管理机构','报告类别','规模','本月收益','YTD累计收益','货币YTD年化','成立日期'],shown.map(r=>['<button class="product-link" data-product-id="'+esc(r.id)+'" title="'+esc(r.file+' / 表'+r.table+' / 行'+r.row)+'">'+esc(r.name)+'</button><div class="subtle">'+r.id+'</div>',esc(r.manager),esc(r.category),fmt(r.size),pct(r.monthly,'/'),pct(r.ytd,'/'),pct(r.annualized,'/'),esc(r.inception)]))+
+    return table(['产品名称 / 产品ID','管理机构','报告类别','规模（亿元）','本月收益（%）','YTD累计收益（%）','货币YTD年化（%）','成立日期'],shown.map(r=>['<button class="product-link" data-product-id="'+esc(r.id)+'" title="'+esc(r.file+' / 表'+r.table+' / 行'+r.row)+'">'+esc(r.name)+'</button><div class="subtle">'+r.id+'</div>',esc(r.manager),esc(r.category),fmt(r.size),pct(r.monthly,'/'),pct(r.ytd,'/'),pct(r.annualized,'/'),esc(r.inception)]))+
       '<div class="pager"><span class="subtle">共 '+a.length+'只 · 第 '+state.pageNo+' / '+pages+' 页 · 每页25只</span><div class="controls"><button id="prev" '+(state.pageNo===1?'disabled':'')+'>上一页</button><button id="next" '+(state.pageNo===pages?'disabled':'')+'>下一页</button></div></div>';
   }
   function products(){
@@ -192,7 +192,7 @@
     function refresh(){state.pageNo=1;$('#product-table').innerHTML=productTable();bindPager();}
     $('#category').onchange=e=>{state.category=e.target.value;refresh();};$('#manager').onchange=e=>{state.manager=e.target.value;refresh();};$('#sort').onchange=e=>{state.sort=e.target.value;refresh();};
     let timer;$('#search').oninput=e=>{state.search=e.target.value;clearTimeout(timer);timer=setTimeout(refresh,150);};
-    $('#export-filter').onclick=()=>{const headers=['产品ID','产品名称','管理机构','报告大类','期末规模 亿元','本月收益率','YTD累计收益率','货币YTD年化收益率','成立日期','来源文件','原表表号','原表行号'],rows=filtered().map(r=>[r.id,r.name,r.manager,r.category,r.size,pct(r.monthly,'/'),pct(r.ytd,'/'),pct(r.annualized,'/'),r.inception,r.file,r.table,r.row]),csv='\ufeff'+[headers,...rows].map(a=>a.map(v=>'"'+String(v??'').replace(/"/g,'""')+'"').join(',')).join('\r\n'),url=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'})),a=document.createElement('a');a.href=url;a.download='保险资管产品_'+state.data.month+'_筛选明细.csv';a.click();setTimeout(()=>URL.revokeObjectURL(url),5000);};bindPager();
+    $('#export-filter').onclick=()=>{const headers=['产品ID','产品名称','管理机构','报告大类','期末规模（亿元）','本月收益率（%）','YTD累计收益率（%）','货币YTD年化收益率（%）','成立日期','来源文件','原表表号','原表行号'],rows=filtered().map(r=>[r.id,r.name,r.manager,r.category,r.size,pct(r.monthly,'/'),pct(r.ytd,'/'),pct(r.annualized,'/'),r.inception,r.file,r.table,r.row]),csv='\ufeff'+[headers,...rows].map(a=>a.map(v=>'"'+String(v??'').replace(/"/g,'""')+'"').join(',')).join('\r\n'),url=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'})),a=document.createElement('a');a.href=url;a.download='保险资管产品_'+state.data.month+'_筛选明细.csv';a.click();setTimeout(()=>URL.revokeObjectURL(url),5000);};bindPager();
   }
   function bindPager(){if($('#prev'))$('#prev').onclick=()=>{state.pageNo--;$('#product-table').innerHTML=productTable();bindPager();};if($('#next'))$('#next').onclick=()=>{state.pageNo++;$('#product-table').innerHTML=productTable();bindPager();};bindProductLinks();}
   function bindProductLinks(){

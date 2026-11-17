@@ -551,7 +551,7 @@ renderRivalArea=function(p){
   if(!peers.length){el.textContent='公开目录中未找到同策略候选产品。';return;}
   const metric=(q,key)=>{const v=key==='scale'?familyScale(q):finite((DS.perfMap[q.code]||{})[key]);return v==null?'--':v.toFixed(2)+(key==='scale'?'':'%');};
   el.innerHTML='<div style="overflow-x:auto"><table style="width:100%;font-size:12px;border-collapse:collapse"><thead><tr><th style="text-align:left">指标</th>'+rows.map(q=>'<th style="min-width:100px;padding:8px">'+htmlText(q.name)+'<br><small style="color:var(--text-3)">'+q.code+'</small></th>').join('')+'</tr></thead><tbody>'+
-    [['规模（亿）','scale'],['近一月','m1'],['近一年','y1'],['今年以来','ytd'],['历史最大回撤','mdd']].map(([label,key])=>'<tr><td style="padding:10px 4px;border-top:1px solid var(--border-soft)">'+label+'</td>'+rows.map(q=>'<td style="text-align:center;border-top:1px solid var(--border-soft)">'+metric(q,key)+'</td>').join('')+'</tr>').join('')+'</tbody></table></div>';
+    [['规模（亿元）','scale'],['近一月（%）','m1'],['近一年（%）','y1'],['今年以来（%）','ytd'],['历史最大回撤（%）','mdd']].map(([label,key])=>'<tr><td style="padding:10px 4px;border-top:1px solid var(--border-soft)">'+label+'</td>'+rows.map(q=>'<td style="text-align:center;border-top:1px solid var(--border-soft)">'+metric(q,key)+'</td>').join('')+'</tr>').join('')+'</tbody></table></div>';
   const chart=document.getElementById('rivalCompareChart');chart.style.display='block';
   if(compareChart)compareChart.dispose();compareChart=echarts.init(chart);const T=ct();
   compareChart.setOption({backgroundColor:'transparent',tooltip:{trigger:'axis'},legend:{textStyle:{color:T.legend}},
