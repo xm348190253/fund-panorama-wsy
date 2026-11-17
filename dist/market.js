@@ -71,7 +71,8 @@ classifyFundSubtype=function(p){
 };
 function purchaseMeta(value){
   if(!value) return {code:'unknown',label:'申购状态未核验'};
-  if(/暂停|封闭|不开放/.test(value)) return {code:'closed',label:value};
+  if(/即将封闭/.test(value)) return {code:'closing',label:value};
+  if(/(?:暂停|停止|不开放)申购|(?:暂停|停止)购买|封闭|^(?:暂停|停止|不开放)$/.test(value)) return {code:'closed',label:value};
   if(/限额|限购|大额/.test(value)) return {code:'limited',label:value};
   if(/开放|正常/.test(value)) return {code:'open',label:value};
   return {code:'unknown',label:value};
@@ -502,11 +503,6 @@ renderKpi=function(){
   text('kpiSharpe',returns.length?fmt.signed(returns.reduce((a,b)=>a+b,0)/returns.length,2)+'%':'--');
   text('kpiSharpeSub','等权平均 · 已有近一年收益 '+returns.length+' / '+list.length+' 只');
 };
-updateTableHint=function(){
-  const list=filteredProducts(),dates=list.map(p=>(DS.perfMap[p.code]||{}).jzrq).filter(Boolean).sort();
-  const el=document.getElementById('tableHint');if(!el)return;
-  el.textContent=(dates.length?'净值日期 '+dates[0]+(dates[0]!==dates.at(-1)?'～'+dates.at(-1):'')+' · ':'')+(STATE.sortKey==='w1'?'非货币按近一周、货币按七日年化分组排序 · ':'')+'点击表头排序 · 点击行查看详情';
-};
 const referenceRenderBubble=renderBubble;
 renderBubble=function(){referenceRenderBubble();
   const list=bubbleProducts();
@@ -544,7 +540,7 @@ findInternalAlternatives=function(p,max=3){
 tabCompetitorHtml=function(p){
   return '<div class="dr-section"><div class="dr-section-title">全市场同类产品推荐</div>'+
     '<div class="dr-desc">按投资类型、三级细分、名称主题及可得规模匹配。申购状态与具体投资策略见各基金披露。</div>'+
-    '<div class="alt-list">'+findInternalAlternatives(p,3).map(q=>'<div class="alt-card" data-jump="'+q.code+'"><div class="alt-name">'+htmlText(q.name)+'</div><div class="alt-meta">'+q.code+' · '+htmlText(q.company)+' · '+htmlText(q.status.label)+'</div><div class="alt-reason">'+htmlText(q._altReason)+'</div></div>').join('')+'</div></div>'+
+    '<div class="alt-list">'+findInternalAlternatives(p,3).map(q=>'<div class="alt-card" data-jump="'+q.code+'"><div class="alt-name">'+htmlText(q.name)+'</div><div class="alt-meta">'+q.code+' · '+htmlText(q.company)+(q.status.code==='closed'?' · <span class="status-pill code-closed">暂停申购</span>':'')+'</div><div class="alt-reason">'+htmlText(q._altReason)+'</div></div>').join('')+'</div></div>'+
     '<div class="dr-section"><div class="dr-section-title">同类产品数据对比</div><div id="rivalArea" data-code="'+p.code+'"></div><div id="rivalCompareChart" style="height:280px;display:none"></div><div id="rivalRadarChart" style="height:260px;display:none"></div></div>';
 };
 findMarketCompetitors=async(p,n)=>findInternalAlternatives(p,n);
@@ -623,17 +619,9 @@ renderTicker=function(){
   }
 };
 function updateSourceUI(){
-  const text=(id,value)=>{const el=document.getElementById(id);if(el)el.textContent=value;};
-  text('dsModeLabel',snapshotMode()?'内网快照':'动态数据');text('dsRefreshLabel',snapshotMode()?'快照日期':'动态刷新');
-  text('poolSource',MARKET.sourceMode+(MARKET.snapshotIssue?' · 快照加载不完整':''));text('poolUpdated',localStamp(MARKET.updatedAt));
-  text('poolCounts',PRODUCTS.length.toLocaleString('zh-CN')+' 份额 · '+FAMILY_MEMBERS.size.toLocaleString('zh-CN')+' 家族');
-  const loaded=PRODUCTS.filter(p=>finite((DS.perfMap[p.code]||{}).m1)!=null).length;
-  text('dsStatus',(MARKET.busy?'更新中 · ':'')+(MARKET.returnProgress?'批量业绩 '+MARKET.returnProgress.done+' / '+MARKET.returnProgress.total+' · ':'')+(MARKET.detailProgress?'当前页详情 '+MARKET.detailProgress.done+' / '+MARKET.detailProgress.total+' · ':'')+'近期业绩 '+loaded.toLocaleString('zh-CN')+' / '+PRODUCTS.length.toLocaleString('zh-CN'));
-  text('dsRefresh',snapshotMode()?localStamp(SNAP.meta.updatedAt):MARKET.refreshTime?localStamp(MARKET.refreshTime):'随附快照 '+localStamp(SNAP.meta.updatedAt));
-  const dot=document.getElementById('dsDot');if(dot)dot.style.background=MARKET.busy||healthFailures().length?'var(--gold)':'var(--green)';
   const note=document.getElementById('offlineNote');
   if(note){
-    note.textContent=MARKET.snapshotIssue||(snapshotMode()?'内网快照模式 · 数据截至 '+localStamp(SNAP.meta.updatedAt)+' · 搜索、筛选及 CSV 导出可用。':!canConnect()?'当前离线：显示随附快照及最近成功缓存，数据日期见统计和表格。':MARKET.failures.length?'部分接口未更新，保留已有数据。详情见数据健康面板。':'');
+    note.textContent=MARKET.snapshotIssue||(MARKET.busy?'数据更新中…':!snapshotMode()&&!canConnect()?'离线数据':MARKET.failures.length?'部分数据更新失败':'');
     note.style.color=MARKET.snapshotIssue?'#F2AA6B':'';note.style.border=MARKET.snapshotIssue?'1px solid #FFB85C':'';
     note.style.fontWeight=MARKET.snapshotIssue?'600':'';note.setAttribute('role',MARKET.snapshotIssue?'alert':'status');
     if(MARKET.snapshotIssue){const retry=document.createElement('button');retry.textContent='重新加载页面';retry.style.cssText='margin-left:12px;padding:4px 10px;border:1px solid currentColor;border-radius:5px;background:transparent;color:inherit;cursor:pointer';retry.onclick=()=>location.reload();note.appendChild(retry);}
@@ -863,7 +851,7 @@ window.__startApp=async function(){
     for(const [code,rt]of Object.entries(cached.realtime||{}))if(!(DS.realtimeMap[code]||{}).jzrq||rt.jzrq>=(DS.realtimeMap[code]||{}).jzrq)DS.realtimeMap[code]=rt;
   }
   const note=document.createElement('div');note.id='offlineNote';note.className='offline-note';document.querySelector('.kpi-grid').before(note);
-  bindThemeToggle();renderTopbarDate();renderChips();renderSubChips();bindSubChipsEvents();
+  bindThemeToggle();renderChips();renderSubChips();bindSubChipsEvents();
   bubbleChart=echarts.init(document.getElementById('chartBubble'));treeChart=echarts.init(document.getElementById('chartTree'));
   bindTableEvents();bindToolbar();bindDrawerEvents();
   document.getElementById('drawerClose').onclick=closeDrawer;document.getElementById('drawerMask').onclick=closeDrawer;

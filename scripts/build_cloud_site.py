@@ -131,11 +131,8 @@ def build(root, output, version, node='node'):
         html = html.replace("  event.preventDefault();event.stopImmediatePropagation();",
                             "  if(anchor.href===" + json.dumps(ADMIN_URL) + ")return;\n"
                             "  event.preventDefault();event.stopImmediatePropagation();", 1)
-        notice = ('<br>共用云端版本 ' + version
-                  + ' · 每天北京时间 08:00 计划开始采集，错峰补偿；刷新读取最新已成功发布版本。'
-                  + '<br><a style="color:var(--accent);text-decoration:underline" target="_blank" rel="noopener noreferrer" href="'
-                  + ADMIN_URL + '">立即更新（管理员）／查看更新进度</a>'
-                  + ' · 管理员登录 GitHub 后点击 Run workflow；普通访问只读。')
+        notice = (' · <a style="color:var(--accent);text-decoration:underline" target="_blank" rel="noopener noreferrer" href="'
+                  + ADMIN_URL + '">更新进度</a>')
         html, count = re.subn(r'(<div id="deliveryBanner" role="status">[^<]*)(</div>)',
                              lambda m: m[1] + notice + m[2], html)
         if count != 1:

@@ -44,8 +44,7 @@ def restricted_html(html, meta, *, same_origin_assets=False):
     as_of = str((meta.get('collection') or {}).get('asOf') or meta.get('updatedAt', '')[:10])
     if not re.fullmatch(r'\d{4}-\d{2}-\d{2}', as_of):
         raise ValueError('A valid snapshot date is required for restricted distribution')
-    label = '内网快照版' if same_origin_assets else '离线快照版'
-    banner = f'{label} · 数据快照 {as_of} · 不连接外部数据源'
+    banner = f'数据更新 {as_of}'
     config = {'snapshotDate': as_of, 'mode': 'intranet' if same_origin_assets else 'offline',
               'directoryCount': meta.get('directoryCount')}
     bootstrap = """window.__FUND_OFFLINE__=true;

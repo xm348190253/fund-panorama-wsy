@@ -173,7 +173,7 @@ body{background-image:var(--page-grad);min-height:100vh;padding-bottom:60px;tran
 .status-pill.code-open{color:var(--green)}
 .status-pill.code-limited{color:var(--gold)}
 .status-pill.code-closing{color:#FF8C42}
-.status-pill.code-closed{color:var(--text-3)}
+.status-pill.code-closed{color:#b77b00;background:#fff3bd;border-color:#edbd32}
 .status-pill::before{content:'';width:6px;height:6px;border-radius:50%;background:currentColor}
 .status-pill.code-open::before{box-shadow:0 0 5px currentColor}
 .status-pill.code-limited::before{animation:pulse 2s infinite}
@@ -424,6 +424,11 @@ button:focus-visible,input:focus-visible,a:focus-visible,select:focus-visible{ou
 .purchase-status-legend{display:flex;flex-wrap:wrap;align-items:center;gap:10px 18px;padding:0 20px 14px;color:var(--text-3);font-size:11px}
 .purchase-status-legend span{display:inline-flex;gap:6px;align-items:center}.purchase-status-legend i{display:inline-block;width:8px;height:8px;border-radius:50%}
 @media(max-width:600px){.matrix-type-options{grid-template-columns:1fr}.matrix-type-picker{margin-left:14px;margin-right:14px}}
+.ptable tbody td:first-child,.ptable .cell-name,table th:first-child,table td:first-child{font-weight:700}
+.kpi-card,.dr-metric,.dr-mgr-quote,.alt-card{text-align:center}
+.kpi-value{justify-content:center}
+.flag-item{text-align:center;justify-content:center}
+.status-pill.code-closed{font-weight:650}
 </style>
 </head>
 <body>
@@ -444,16 +449,6 @@ button:focus-visible,input:focus-visible,a:focus-visible,select:focus-visible{ou
     </div>
   </div>
   <div class="topbar-right">
-    <div class="legend-group">
-      <div class="legend-mini" title="申购状态按公开接口返回展示；未返回的标注未核验，实际交易以基金管理人公告为准"><span class="legend-dot status-open"></span><span>申购状态以官网为准</span></div>
-    </div>
-    <div class="ds-stack" id="dsStack" title="产品池决定页面有哪些基金；业绩接口更新已有基金代码的数据">
-      <div class="ds-row"><span class="ds-dot" id="dsDot"></span><span id="dsModeLabel">动态数据</span><span class="ds-time" id="dsStatus">初始化中…</span></div>
-      <div class="ds-row"><span id="dsRefreshLabel">动态刷新</span><span class="ds-time" id="dsRefresh">--</span></div>
-      <div class="ds-row"><span>产品池</span><span class="ds-time" id="poolSource">读取中…</span></div>
-      <div class="ds-row"><span>池更新时间</span><span class="ds-time" id="poolUpdated">--</span></div>
-      <div class="ds-row"><span>池统计</span><span class="ds-time" id="poolCounts">--</span></div>
-    </div>
     <button id="refreshBtn" title="清除本地缓存并重新拉取最新业绩 / 行情数据"
       style="background:var(--glass-bg);border:1px solid var(--glass-border);color:var(--text-2);width:34px;height:34px;border-radius:10px;cursor:pointer;font-size:15px;font-family:inherit;backdrop-filter:blur(var(--blur))">↻</button>
     <button id="healthBtn" title="数据健康面板：查看数据合理性自检异常清单"
@@ -461,7 +456,6 @@ button:focus-visible,input:focus-visible,a:focus-visible,select:focus-visible{ou
       🔔<span id="healthBadge" style="position:absolute;top:-4px;right:-4px;background:var(--red);color:#fff;font-size:10px;border-radius:8px;padding:1px 5px;min-width:14px;display:none"></span>
     </button>
     <button id="themeToggle" class="theme-toggle" title="切换深色 / 浅色主题" aria-label="切换主题">☾</button>
-    <div class="topbar-date" id="topbarDate"></div>
   </div>
 </header>
 
@@ -535,7 +529,7 @@ button:focus-visible,input:focus-visible,a:focus-visible,select:focus-visible{ou
   <div class="panel panel-bubble">
     <div class="panel-header">
       <div class="panel-title"><span id="matrixTitle">风险收益矩阵</span> <span id="matrixCoverage" style="font-size:10px;font-weight:400;color:var(--text-3)"></span></div>
-      <div class="panel-hint" id="matrixHint">X = 最大回撤(回撤越浅越右) &nbsp;·&nbsp; Y = 近一年收益 &nbsp;·&nbsp; 大小 = 已披露家族规模 &nbsp;·&nbsp; 颜色 = 投资大类<br>同类比较：越靠右历史回撤越浅，越靠上近一年收益越高<br>黄圈表示限购，其他申购状态见悬浮详情</div>
+      <div class="panel-hint" id="matrixHint">最大回撤 × 近一年收益 · 大小表示规模 · 黄圈表示暂停申购</div>
     </div>
     <details class="matrix-type-picker">
       <summary>产品类型多选 <span id="matrixTypeSummary">纯债</span></summary>
@@ -562,11 +556,10 @@ button:focus-visible,input:focus-visible,a:focus-visible,select:focus-visible{ou
   <div class="panel-header">
     <div class="panel-title">产品明细</div>
     <div style="display:flex;align-items:center;gap:14px;margin-left:auto">
-      <div class="panel-hint" id="tableHint">点击表头排序 · 点击行查看详情</div>
       <button id="exportBtn" class="chip" style="padding:6px 13px;font-size:12px;flex-shrink:0" title="导出当前筛选结果为 CSV（可用 Excel 打开）">⬇ 导出CSV</button>
     </div>
   </div>
-  <div class="purchase-status-legend" aria-label="申购状态图例">名称前圆点为申购状态 <span><i style="background:#00C853"></i>正常申购</span><span><i style="background:#FFB800"></i>限购</span><span><i style="background:#7A8294"></i>暂停或未核验，悬浮查看</span></div>
+  <div class="purchase-status-legend" aria-label="申购状态图例"><span><i style="background:#FFD43B"></i>黄色标记表示暂停申购</span></div>
   <div class="table-wrap">
     <table class="ptable" id="ptable">
       <thead>
@@ -846,7 +839,7 @@ const STATUS_META = {
   open:{color:'#00C853',label:'正常申购'},
   limited:{color:'#FFB800',label:'限购中'},
   closing:{color:'#FF8C42',label:'即将封闭'},
-  closed:{color:'#7A8294',label:'暂停申购'}
+  closed:{color:'#FFD43B',label:'暂停申购'}
 };
 
 // 注：原 deriveAttribution（按固定权重把 annualReturn/4 拆成 β/α/久期/信用 的"业绩归因"）
@@ -1500,7 +1493,7 @@ const fmt = {
   scale: v => (v==null||isNaN(v)||v===0) ? '--' : (v>=100 ? (+v).toFixed(0) : (+v).toFixed(1))
 };
 function l1Color(l1){ const x = L1_BY_KEY[l1]; return x?x.color:'#888'; }
-function statusInfo(p){ return STATUS_META[p.status.code]; }
+function statusInfo(p){ return p.status.code==='closed'?STATUS_META.closed:null; }
 function sharePasses(p){ if(STATE.showAllShares) return true; return p.isPrimary !== false; }
 
 // ============================================================
@@ -1574,10 +1567,6 @@ function getPerf(){}
 function sortedProducts(){}
 function escapeHtml(s){ return String(s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
-function renderTopbarDate(){
-  const d=new Date(), z=n=>String(n).padStart(2,'0');
-  document.getElementById('topbarDate').textContent = d.getFullYear()+'-'+z(d.getMonth()+1)+'-'+z(d.getDate());
-}
 // 一级（投资大类）
 function renderChips(){
   const bar = document.getElementById('chipBar');
@@ -1759,7 +1748,7 @@ function renderBubble(){
   if(riskHost?.style)riskHost.style.display=hasRisk?'':'none';
   if(moneyHost)moneyHost.hidden=!hasMoney;
   const title=document.getElementById('matrixTitle');if(title)title.textContent=hasMoney?(hasRisk?'风险收益矩阵 / 货币收益分析':'货币基金收益分析'):'风险收益矩阵';
-  const hint=document.getElementById('matrixHint');if(hint)hint.textContent=hasMoney&&!hasRisk?'X = 已披露规模 · Y = 七日年化 · 黄圈表示限购':'X = 最大回撤 · Y = 近一年收益 · 大小 = 已披露规模 · 颜色 = 投资大类；黄圈表示限购';
+  const hint=document.getElementById('matrixHint');if(hint)hint.textContent=hasMoney&&!hasRisk?'规模 × 七日年化 · 黄圈表示暂停申购':'最大回撤 × 近一年收益 · 大小表示规模 · 黄圈表示暂停申购';
   renderMoneyBubble(hasMoney?selected.filter(p=>isMoneyFund(p.code)):[],hasMoney);
   const data = selected.filter(p=>!isMoneyFund(p.code)).map(p=>{
     const pf=DS.perfMap[p.code]||{},gp=getPerf(p);
@@ -1770,19 +1759,19 @@ function renderBubble(){
 
   const series = INVEST_HIERARCHY.map(h=>{
     const items = data.filter(x=>x.p.l1===h.l1).map(x=>{
-      const isLimit = x.p.status.code !== 'open';
+      const isStopped = x.p.status.code==='closed';
       return {
         name: x.p.name,
         // value: [x, y, scale, code, mgr, status, l1, l2, l3]
         value: [x.mdd, x.y1, x.scale, x.p.code, x.mgr, x.p.status.code, x.p.l1, x.p.l2, x.p.l3],
         symbolSize: bubbleSize(x.scale),
         itemStyle: {
-          borderColor: isLimit ? STATUS_META[x.p.status.code].color : 'rgba(255,255,255,0.15)',
-          borderWidth: isLimit?2:1, opacity:0.85
+          borderColor: isStopped ? STATUS_META.closed.color : 'transparent',
+          borderWidth: isStopped?2:0, opacity:0.95
         }
       };
     });
-    return { name:h.l1, type:'scatter', data:items, color:h.color, emphasis:{ focus:'series', scale:1.15 } };
+    return { name:h.l1, type:'scatter', data:items, color:scatterColor(h.l1), emphasis:{ focus:'series', scale:1.15 } };
   }).filter(s=>s.data.length);
 
   const T=ct();
@@ -1816,7 +1805,7 @@ function renderBubble(){
           '<tr><td style="padding:1px 12px 1px 0">合并规模</td><td style="color:'+T.tipText+';font-weight:600">'+(sc>0?fmt.scale(sc)+' 亿':'<span style=\"color:'+T.label+'\">未披露</span>')+'</td></tr>'+
           '<tr><td style="padding:1px 12px 1px 0">最大回撤</td><td style="color:#FF5C5C;font-weight:600">'+(mdd!=null?fmt.signed(mdd,2)+'%':'--')+'</td></tr>'+
           '<tr><td style="padding:1px 12px 1px 0">近一年收益</td><td style="color:'+(y1>=0?'#FF5C5C':'#00C853')+';font-weight:600">'+fmt.signed(y1,2)+'%</td></tr>'+
-          '</table><div style="margin-top:6px">申购状态 '+escapeHtml(STATUS_META[statusCode]?.label||'申购状态未核验')+'</div><div style="color:'+T.label+';font-size:11px;margin-top:6px;border-top:1px solid '+T.tipBorder+';padding-top:6px">点击查看详情</div>';
+          '</table>'+(statusCode==='closed'?'<div class="status-pill code-closed" style="margin-top:6px">暂停申购</div>':'')+'<div style="color:'+T.label+';font-size:11px;margin-top:6px;border-top:1px solid '+T.tipBorder+';padding-top:6px">点击查看详情</div>';
       } },
     series: series
   }, true);
@@ -1828,6 +1817,9 @@ function renderBubble(){
 function moneyBubbleRows(list){
   return list.map(p=>{const pf=DS.perfMap[p.code]||{};return {p,pf,scale:getPerf(p).scale,yield:pf.qrnh};})
     .filter(x=>Number.isFinite(x.scale)&&x.scale>0&&Number.isFinite(x.yield));
+}
+function scatterColor(type){
+  return {'股票型':'#FF633A','混合型':'#FFAD29','债券型':'#FF7900','货币型':'#F5AE17','QDII':'#F277B4','FOF':'#AF82F2','REITs':'#39B9BA','商品型':'#F7C92B','其他':'#5A9EF5'}[type]||'#FF8A1C';
 }
 function renderMoneyBubble(list,visible){
   if(!visible)return;
@@ -1846,9 +1838,9 @@ function renderMoneyBubble(list,visible){
         metric('七日年化',row.yield.toFixed(3)+'%')+metric('每万份收益',Number.isFinite(pf.wfsy)?pf.wfsy.toFixed(4)+' 元':'未披露')+
         metric('近一年实际收益',Number.isFinite(pf.y1)?pf.y1.toFixed(2)+'%':'未披露')+
         metric('收益日期',escapeHtml(pf.qrnhAsOf||pf.jzrq||'未披露'))+metric('规模日期',escapeHtml(pf.scaleDate||'未披露'))+
-        metric('申购状态',escapeHtml(STATUS_META[p.status.code]?.label||'未核验'))+'<div style="margin-top:6px">点击查看详情</div>';
+        (p.status.code==='closed'?'<div class="status-pill code-closed">暂停申购</div>':'')+'<div style="margin-top:6px">点击查看详情</div>';
     }},
-    series:[{name:'货币型',type:'scatter',symbolSize:9,color:document.documentElement.dataset.theme==='light'?'#C4510D':'#FF9B54',data:rows.map(x=>({name:x.p.name,value:[x.scale,x.yield,x.scale,x.p.code],itemStyle:{opacity:.8,borderColor:x.p.status.code==='limited'?STATUS_META.limited.color:'transparent',borderWidth:x.p.status.code==='limited'?2:0}}))}]
+    series:[{name:'货币型',type:'scatter',symbolSize:9,color:scatterColor('货币型'),data:rows.map(x=>({name:x.p.name,value:[x.scale,x.yield,x.scale,x.p.code],itemStyle:{opacity:.95,borderColor:x.p.status.code==='closed'?STATUS_META.closed.color:'transparent',borderWidth:x.p.status.code==='closed'?2:0}}))}]
   },true);
   moneyChart.off('click');moneyChart.on('click',pt=>{if(pt.value?.[3])openDrawer(pt.value[3]);});
   if(moneyChart.resize)moneyChart.resize();
@@ -2077,7 +2069,7 @@ function renderTable(){
     const subtypeCell = '<span class="cell-sub-tag" title="'+escapeHtml(subtypeTitle)+'">'+escapeHtml(subtype)+'</span>';
     return '<tr title="净值日期 '+escapeHtml(pf.jzrq||'--')+' · 规模：折叠为已披露份额合计，展开为当前份额" data-code="'+p.code+'" class="'+(STATE.selectedCode===p.code?'selected':'')+'">'+
       '<td><span class="fav-star'+(isFav(p.code)?' on':'')+'" data-fav="'+p.code+'" title="加入 / 移出自选">'+(isFav(p.code)?'★':'☆')+'</span>'+
-        '<span class="cell-status-dot" style="background:'+sm.color+'" title="'+escapeHtml(p.status.label)+'" aria-label="'+escapeHtml(p.status.label)+'"></span>'+
+        (sm?'<span class="cell-status-dot" style="background:'+sm.color+'" title="'+escapeHtml(p.status.label)+'" aria-label="暂停申购"></span>':'')+
         '<span class="cell-name">'+escapeHtml(p.name)+'</span><span class="cell-code">'+p.code+(pf.jzrq?' · '+escapeHtml(pf.jzrq):'')+'</span>'+shareTag+sanityFlag+'</td>'+
       '<td>'+mgrCell+'</td>'+
       '<td><span class="cell-cat-badge" style="--type-color:'+l1Color(p.l1)+'">'+p.l1+'</span></td>'+
@@ -2314,7 +2306,7 @@ function drawRivalCompare(){}
 function openDrawer(code){
   const p = PRODUCTS.find(x=>x.code===code); if (!p) return;
   STATE.selectedCode = code; STATE.activeTab = 'overview';
-  const sm = STATUS_META[p.status.code];
+  const sm = statusInfo(p);
   const inception = getInceptionDate(p);
   const subDisplay = (p.l3 || p.l2 || '') + (inception ? (' · 当前代码披露成立日 '+inception) : '');
   const pf = DS.perfMap[p.code] || {};
@@ -2325,9 +2317,7 @@ function openDrawer(code){
   const html = '<div class="dr-head">'+
     '<div class="dr-name">'+p.name+'</div>'+
     '<div class="dr-code">代码 '+p.code+' · '+subDisplay+'</div>'+
-    '<div class="dr-status-row">'+
-    '<span class="status-pill code-'+p.status.code+'">'+sm.label+'</span>'+
-    '<span style="color:var(--text-3)">'+escapeHtml(p.status.label||'')+'</span></div>'+
+    (sm?'<div class="dr-status-row"><span class="status-pill code-closed">暂停申购</span></div>':'')+
     '<div class="dr-meta">'+
     '<div class="dr-meta-item"><span class="dr-meta-label">投资类型</span><span style="color:'+l1Color(p.l1)+';font-weight:600">'+p.l1+' · '+p.l2+' · '+p.l3+'</span></div>'+
     '<div class="dr-meta-item"><span class="dr-meta-label">产品形态</span><span style="font-weight:600">'+escapeHtml(subtype)+'</span></div>'+
