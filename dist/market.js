@@ -42,18 +42,18 @@ function addCategory(l1,color,l2,l3){
 }
 assignInvestType=function(p){
   const type=p.type||'';
-  if(/商品型/.test(type)||type==='指数型-其他'&&/黄金ETF|黄金交易型|上海金|白银期货/.test(p.name))return addCategory('商品型','#D6AE55','商品投资',/黄金|上海金/.test(p.name)?'黄金':'其他商品');
+  if(/商品型/.test(type)||type==='指数型-其他'&&/黄金ETF|黄金交易型|上海金|白银期货/.test(p.name))return addCategory('商品型','#D2B497','商品投资',/黄金|上海金/.test(p.name)?'黄金':'其他商品');
   if(TYPE_TO_HIER[type]) return {...TYPE_TO_HIER[type]};
   if(/reits?/i.test(type+' '+p.name)) return {l1:'REITs',l2:'基础设施REIT',l3:'公募REIT'};
   if(/货币/.test(type)) return {l1:'货币型',l2:'普通货币',l3:'货币基金'};
-  if(/可转债/.test(type)) return addCategory('债券型','#4ECDC4','混合债','可转债');
-  if(/混合型.*平衡/.test(type)) return addCategory('混合型','#FFB85C','平衡混合','平衡混合');
-  if(/QDII/.test(type)) return addCategory('QDII','#A8DADC',/商品/.test(type)?'商品QDII':'其他QDII',type);
-  if(/FOF/.test(type)) return addCategory('FOF','#C77DFF','其他FOF',type);
-  if(/债券/.test(type)) return addCategory('债券型','#4ECDC4','其他债券',type);
-  if(/混合/.test(type)) return addCategory('混合型','#FFB85C','其他混合',type);
-  if(/股票/.test(type)) return addCategory('股票型','#FF6B6B','其他股票',type);
-  return addCategory('其他','#8897BA','其他类型',type||'未分类');
+  if(/可转债/.test(type)) return addCategory('债券型','#E36715','混合债','可转债');
+  if(/混合型.*平衡/.test(type)) return addCategory('混合型','#F2AA6B','平衡混合','平衡混合');
+  if(/QDII/.test(type)) return addCategory('QDII','#96979B',/商品/.test(type)?'商品QDII':'其他QDII',type);
+  if(/FOF/.test(type)) return addCategory('FOF','#B6B6BA','其他FOF',type);
+  if(/债券/.test(type)) return addCategory('债券型','#E36715','其他债券',type);
+  if(/混合/.test(type)) return addCategory('混合型','#F2AA6B','其他混合',type);
+  if(/股票/.test(type)) return addCategory('股票型','#C4510D','其他股票',type);
+  return addCategory('其他','#B5B6BA','其他类型',type||'未分类');
 };
 STATUS_META.unknown={color:'#7A8294',label:'申购状态未核验'};
 classifyFundSubtype=function(p){
@@ -634,7 +634,7 @@ function updateSourceUI(){
   const note=document.getElementById('offlineNote');
   if(note){
     note.textContent=MARKET.snapshotIssue||(snapshotMode()?'内网快照模式 · 数据截至 '+localStamp(SNAP.meta.updatedAt)+' · 搜索、筛选及 CSV 导出可用。':!canConnect()?'当前离线：显示随附快照及最近成功缓存，数据日期见统计和表格。':MARKET.failures.length?'部分接口未更新，保留已有数据。详情见数据健康面板。':'');
-    note.style.color=MARKET.snapshotIssue?'#FFB85C':'';note.style.border=MARKET.snapshotIssue?'1px solid #FFB85C':'';
+    note.style.color=MARKET.snapshotIssue?'#F2AA6B':'';note.style.border=MARKET.snapshotIssue?'1px solid #FFB85C':'';
     note.style.fontWeight=MARKET.snapshotIssue?'600':'';note.setAttribute('role',MARKET.snapshotIssue?'alert':'status');
     if(MARKET.snapshotIssue){const retry=document.createElement('button');retry.textContent='重新加载页面';retry.style.cssText='margin-left:12px;padding:4px 10px;border:1px solid currentColor;border-radius:5px;background:transparent;color:inherit;cursor:pointer';retry.onclick=()=>location.reload();note.appendChild(retry);}
   }

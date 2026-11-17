@@ -62,8 +62,8 @@ document.addEventListener('auxclick',stopExternalSource,true);
 """.replace('CONFIG', json.dumps(config, ensure_ascii=False).replace('<', '\\u003c'))
     head = ('<meta http-equiv="Content-Security-Policy" content="' + html_module.escape(policy, quote=True) + '">\n'
             '<meta name="referrer" content="no-referrer">\n' + inline_script(bootstrap) + '\n'
-            '<style>#deliveryBanner{padding:10px 20px;background:#122331;color:#d9e8f2;'
-            'font:13px/1.6 system-ui,sans-serif;border-bottom:1px solid #35566b;text-align:center}'
+            '<style>#deliveryBanner{padding:10px 20px;background:var(--bg-2);color:var(--text-2);'
+            'font:13px/1.6 system-ui,sans-serif;border-bottom:1px solid var(--border);text-align:center}'
             '#refreshBtn{display:none!important}</style>')
     html, count = re.subn(r'(<meta\s+charset=["\']UTF-8["\']\s*>)', lambda match: match[1] + '\n' + head, html, count=1, flags=re.I)
     if count != 1:
