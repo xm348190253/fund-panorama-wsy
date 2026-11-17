@@ -487,7 +487,7 @@ button:focus-visible,input:focus-visible,a:focus-visible,select:focus-visible{ou
   <div class="chip-bar-label">一级大类</div>
   <button class="chip active" data-l1="ALL">全部产品 <span class="chip-count" id="chipCountALL"></span></button>
   <div style="margin-left:auto;display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:flex-end">
-    <input id="searchBox" type="search" placeholder="搜索 名称 / 代码 / 经理" autocomplete="off"
+    <input id="searchBox" type="search" placeholder="搜索 公司 / 名称 / 代码 / 经理" title="公司简称或全称按已核验公司归属筛选，其他关键词匹配产品名称、代码和经理" autocomplete="off"
       style="background:var(--glass-bg);border:1px solid var(--glass-border);color:var(--text-1);font-size:12px;padding:6px 12px;border-radius:999px;width:190px;outline:none;font-family:inherit;backdrop-filter:blur(var(--blur))">
     <button id="favToggle" class="chip" style="padding:6px 12px;font-size:12px" title="只看自选产品">☆ 自选</button>
     <button id="clearFilters" class="chip" style="padding:6px 12px;font-size:12px;display:none" title="清除全部筛选与搜索">✕ 清除筛选</button>
@@ -1511,8 +1511,23 @@ function buildFamilies(){
 }
 // 合并规模：把同家族（A+C+E...）的实盘规模相加
 function familyScale(){}
+function companySearchName(value){
+  return String(value||'').trim().toLowerCase().replace(/\s+/g,'')
+    .replace(/[（(]中国[）)]/g,'')
+    .replace(/(?:股份有限公司|有限责任公司|有限公司)$/,'')
+    .replace(/基金管理$|基金$/,'');
+}
+function matchingCompanies(query){
+  const name=companySearchName(query),companies=new Map();
+  if(!name)return companies;
+  for(const p of PRODUCTS){
+    if(p.companyId&&p.company&&companySearchName(p.company)===name)companies.set(p.companyId,p.company);
+  }
+  return companies;
+}
 function filteredProducts(){
   const q = (STATE.search||'').trim().toLowerCase();
+  const companies = matchingCompanies(q);
   return PRODUCTS.filter(p => {
     if(!((STATE.l1==='ALL' || p.l1===STATE.l1) &&
          (STATE.l2==='ALL' || p.l2===STATE.l2) &&
@@ -1520,6 +1535,7 @@ function filteredProducts(){
          sharePasses(p))) return false;
     if(STATE.favOnly && !FAVS.has(p.code)) return false;
     if(q){
+      if(companies.size)return companies.has(p.companyId);
       const mgr = (DS.perfMap[p.code] && DS.perfMap[p.code].manager) || p.manager || '';
       const hay = (p.name+' '+p.code+' '+mgr).toLowerCase();
       if(hay.indexOf(q) < 0) return false;

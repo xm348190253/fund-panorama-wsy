@@ -171,6 +171,35 @@ assert.equal(new Set(chipBar.children.map(el=>el.dataset.l1)).size,chipBar.child
 assert.equal(chipBar.children.filter(el=>el.classList.contains('active')).length,1,'selected category stays active after redraw');
 let clicks=0;renderSubChips=()=>{};renderAll=()=>{clicks++;};chipBar.onclick({target:{closest:()=>allChip}});assert.equal(clicks,1);
 document.getElementById=oldGet;document.createElement=oldCreate;renderSubChips=oldSub;renderAll=oldRender;
+const searchProducts=PRODUCTS.map(p=>({...p})),searchPerf=DS.perfMap;
+setProductsFromPool([
+  {code:'000101',name:'华安稳健混合A',type:'混合型-偏股',company:'华安基金',companyId:'huaan'},
+  {code:'000102',name:'华安稳健混合C',type:'混合型-偏股',company:'华安基金',companyId:'huaan'},
+  {code:'000103',name:'新华安享混合A',type:'混合型-偏股',company:'新华基金',companyId:'xinhua'},
+  {code:'000104',name:'银华安盈债券A',type:'债券型-长债',company:'银华基金',companyId:'yinhua'},
+  {code:'000105',name:'鹏华安和混合A',type:'混合型-偏股',company:'鹏华基金',companyId:'penghua'},
+  {code:'000106',name:'兴华安恒债券A',type:'债券型-长债',company:'兴华基金',companyId:'xinghua'},
+  {code:'000107',name:'摩根优选混合A',type:'混合型-偏股',company:'摩根基金(中国)',companyId:'morgan'},
+  {code:'000108',name:'华安未核验混合A',type:'混合型-偏股'},
+  {code:'000109',name:'历史名称成长混合A',type:'混合型-偏股',company:'华安基金',companyId:'huaan'}
+]);
+DS.perfMap={'000107':{manager:'张华安'}};
+STATE.l1='ALL';STATE.l2='ALL';STATE.l3='ALL';STATE.favOnly=false;STATE.showAllShares=false;
+for(const query of ['华安','华安基金',' 华安基金管理有限公司 ','华安 基金']){
+  STATE.search=query;
+  assert.equal(filteredProducts().map(p=>p.code).join(','),'000101,000109','company searches use verified identity, including products whose current name differs');
+  renderKpi();assert.equal(elements.get('kpiCompanies').textContent,'1');
+  assert(elements.get('kpiCompaniesSub').textContent.includes('华安基金'));
+}
+STATE.showAllShares=true;assert.equal(filteredProducts().length,3,'share-class toggle remains effective under company search');
+STATE.showAllShares=false;STATE.l1='债券型';assert.equal(filteredProducts().length,0,'investment-type filters remain effective');
+STATE.l1='ALL';STATE.search='安享';assert.equal(filteredProducts()[0].code,'000103','ordinary product keywords retain substring matching');
+STATE.search='张华安';assert.equal(filteredProducts()[0].code,'000107','manager searches remain available');
+STATE.search='000108';assert.equal(filteredProducts()[0].code,'000108','an unmapped company never hides its fund from code search');
+STATE.search='未核验';assert.equal(filteredProducts()[0].code,'000108');
+STATE.search='摩根基金管理（中国）有限公司';assert.equal(filteredProducts()[0].code,'000107','legal name and displayed company short name resolve consistently');
+STATE.search='';assert.equal(filteredProducts().length,8,'clearing search restores all fund families');
+setProductsFromPool(searchProducts);DS.perfMap=searchPerf;
 `,context);
 assert(!html.includes('COMPANY_AUM ='));
 assert(!html.includes('setInterval('),'no automatic refresh interval');
@@ -178,7 +207,7 @@ assert(!html.includes("content:'FG'"));
 const tableHeader=html.match(/<table class="ptable"[\s\S]*?<thead>([\s\S]*?)<\/thead>/)[1];
 const headerCells=[...tableHeader.matchAll(/<th\b[\s\S]*?<\/th>/g)].map(m=>m[0]);
 assert.equal(headerCells.length,13);assert(headerCells.at(-1).includes('data-sort="inceptionDate"'));
-const recentHeader=headerCells.find(cell=>cell.includes('data-sort="w1"'));assert(recentHeader.includes('近一周累计（非货币）/七日年化（货币）'));assert(recentHeader.includes('净值观察区间'));assert(!recentHeader.includes('5 个交易日'));
+const recentHeader=headerCells.find(cell=>cell.includes('data-sort="w1"'));assert(recentHeader.includes('近一周累计（非货币）'));assert(recentHeader.includes('七日年化（货币）'));assert(recentHeader.includes('净值观察区间'));assert(!recentHeader.includes('5 个交易日'));
 vm.runInContext(`(async()=>{
   navigator.onLine=true;
   const actualScheduleCache=scheduleCache;

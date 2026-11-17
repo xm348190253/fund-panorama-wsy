@@ -3,7 +3,10 @@ on:
   push:
     branches: [main]
     paths:
+      - dist/index.html
+      - dist/market.js
       - scripts/insurance-ui.js
+      - scripts/verify_logic.cjs
       - scripts/build_cloud_site.py
       - scripts/insurance_snapshot.py
       - scripts/modelscope_sync.py
@@ -39,6 +42,7 @@ jobs:
           python scripts/modelscope_sync.py bootstrap --dist dist --quote-cache source-cache/index-quotes.json
       - name: 沿用已发布数据并构建界面
         run: |
+          node scripts/verify_logic.cjs
           python -m unittest discover -s scripts -p 'test_insurance_snapshot.py'
           python -m unittest discover -s scripts -p 'test_modelscope_sync.py'
           python scripts/build_cloud_site.py --output cloud-site --version "layout-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"

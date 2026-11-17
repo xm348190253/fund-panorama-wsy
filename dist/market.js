@@ -487,6 +487,8 @@ renderKpi=function(){
   const text=(id,value)=>{const el=document.getElementById(id);if(el)el.textContent=value;};
   text('kpiCompanies',companies.size?companies.size.toLocaleString('zh-CN'):'--');
   text('kpiCompaniesSub','公司归属已核验 '+knownCompanies.length.toLocaleString('zh-CN')+' / '+list.length.toLocaleString('zh-CN')+' 只展示产品');
+  const searchCompanies=matchingCompanies(STATE.search);
+  if(searchCompanies.size)text('kpiCompaniesSub',[...searchCompanies.values()].join('、')+' · 按已核验公司归属筛选');
   text('kpiScale',total!=null?total.toLocaleString('zh-CN',{maximumFractionDigits:2,minimumFractionDigits:2}):'待更新');
   text('kpiScaleUnit','万亿元');
   const totalSub=document.getElementById('kpiScaleSub');
