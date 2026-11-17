@@ -1786,7 +1786,7 @@ function moneyBubbleRows(list){
     .filter(x=>Number.isFinite(x.scale)&&x.scale>0&&Number.isFinite(x.yield));
 }
 function scatterColor(type){
-  return {'股票型':'#FF633A','混合型':'#FFAD29','债券型':'#FF7900','货币型':'#F5AE17','QDII':'#F277B4','FOF':'#AF82F2','REITs':'#39B9BA','商品型':'#F7C92B','其他':'#5A9EF5'}[type]||'#FF8A1C';
+  return {'股票型':'#DF7895','混合型':'#E59B62','债券型':'#6D9DD7','货币型':'#D4AD38','QDII':'#A78BCB','FOF':'#63AD96','REITs':'#579CB6','商品型':'#9EAD59','其他':'#959FB1'}[type]||'#959FB1';
 }
 function renderMoneyBubble(list,visible){
   if(!visible)return;
