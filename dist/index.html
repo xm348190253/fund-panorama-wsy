@@ -423,6 +423,19 @@ button:focus-visible,input:focus-visible,a:focus-visible,select:focus-visible{ou
 .ptable .cell-name{white-space:normal;line-height:1.6}
 .ptable .cell-code{display:block;margin-top:4px;white-space:normal}
 
+.matrix-type-picker{margin:0 20px 12px;border:1px solid var(--border);border-radius:10px;background:var(--glass-bg);color:var(--text-2);font-size:12px}
+.matrix-type-picker summary{padding:11px 14px;cursor:pointer;font-weight:600}
+#matrixTypeSummary{margin-left:10px;color:var(--accent);font-weight:500}
+.matrix-type-note{padding:0 14px 10px;color:var(--text-3);line-height:1.7}
+.matrix-type-options{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;padding:0 14px 14px;max-height:330px;overflow:auto}
+.matrix-type-options fieldset{margin:0;padding:8px 10px;border:1px solid var(--border-soft);border-radius:7px;min-width:0}
+.matrix-type-options legend{padding:0 5px;color:var(--text-2);font-weight:600}
+.matrix-type-options label{display:inline-flex;align-items:center;gap:6px;margin:5px 12px 5px 0;cursor:pointer;line-height:1.6}
+.matrix-type-group{padding:3px 0}.matrix-subtypes{margin-left:20px;padding-left:10px;border-left:1px solid var(--border-soft);color:var(--text-3)}
+.matrix-type-options input{accent-color:var(--accent);width:15px;height:15px;cursor:pointer}
+.purchase-status-legend{display:flex;flex-wrap:wrap;align-items:center;gap:10px 18px;padding:0 20px 14px;color:var(--text-3);font-size:11px}
+.purchase-status-legend span{display:inline-flex;gap:6px;align-items:center}.purchase-status-legend i{display:inline-block;width:8px;height:8px;border-radius:50%}
+@media(max-width:600px){.matrix-type-options{grid-template-columns:1fr}.matrix-type-picker{margin-left:14px;margin-right:14px}}
 </style>
 </head>
 <body>
@@ -534,8 +547,13 @@ button:focus-visible,input:focus-visible,a:focus-visible,select:focus-visible{ou
   <div class="panel panel-bubble">
     <div class="panel-header">
       <div class="panel-title">风险收益矩阵 <span id="matrixCoverage" style="font-size:10px;font-weight:400;color:var(--text-3)"></span></div>
-      <div class="panel-hint">X = 最大回撤(回撤越浅越右) &nbsp;·&nbsp; Y = 近一年收益 &nbsp;·&nbsp; 大小 = 已披露家族规模 &nbsp;·&nbsp; 颜色 = 投资大类<br><span style="color:#FFB800;font-weight:600">同类比较：越靠右历史回撤越浅，越靠上近一年收益越高</span></div>
+      <div class="panel-hint">X = 最大回撤(回撤越浅越右) &nbsp;·&nbsp; Y = 近一年收益 &nbsp;·&nbsp; 大小 = 已披露家族规模 &nbsp;·&nbsp; 颜色 = 投资大类<br><span style="color:#FFB800;font-weight:600">同类比较：越靠右历史回撤越浅，越靠上近一年收益越高</span><br>黄圈表示限购，其他申购状态见悬浮详情</div>
     </div>
+    <details class="matrix-type-picker">
+      <summary>产品类型多选 <span id="matrixTypeSummary">纯债</span></summary>
+      <div class="matrix-type-note">勾选类型后叠加比较，仅控制本图。搜索、自选和份额设置同时生效。</div>
+      <div id="matrixTypeOptions" class="matrix-type-options"></div>
+    </details>
     <div id="chartBubble" class="chart-box"></div>
   </div>
   <div class="panel panel-tree">
@@ -555,6 +573,7 @@ button:focus-visible,input:focus-visible,a:focus-visible,select:focus-visible{ou
       <button id="exportBtn" class="chip" style="padding:6px 13px;font-size:12px;flex-shrink:0" title="导出当前筛选结果为 CSV（可用 Excel 打开）">⬇ 导出CSV</button>
     </div>
   </div>
+  <div class="purchase-status-legend" aria-label="申购状态图例">名称前圆点为申购状态 <span><i style="background:#00C853"></i>正常申购</span><span><i style="background:#FFB800"></i>限购</span><span><i style="background:#7A8294"></i>暂停或未核验，悬浮查看</span></div>
   <div class="table-wrap">
     <table class="ptable" id="ptable">
       <thead>
@@ -944,7 +963,7 @@ function themesOverlap(a, b){
 // ============================================================
 // 主交互逻辑
 // ============================================================
-const STATE = { l1:'ALL', l2:'ALL', l3:'ALL', showAllShares:false, sortKey:'scale', sortAsc:false, selectedCode:null, activeTab:'overview', search:'', favOnly:false };
+const STATE = { l1:'ALL', l2:'ALL', l3:'ALL', showAllShares:false, sortKey:'scale', sortAsc:false, selectedCode:null, activeTab:'overview', search:'', favOnly:false, bubbleTypes:new Set(['债券型|纯债']) };
 // 自选清单（localStorage 持久化，跨会话保留销售自己常用的产品）
 const FAVS = (function(){ try{ return new Set(JSON.parse(localStorage.getItem('fm_favs')||'[]')); }catch(_){ return new Set(); } })();
 function isFav(code){ return FAVS.has(code); }
@@ -1525,14 +1544,14 @@ function matchingCompanies(query){
   }
   return companies;
 }
-function filteredProducts(){
+function filteredProducts(options={}){
   const q = (STATE.search||'').trim().toLowerCase();
   const companies = matchingCompanies(q);
   return PRODUCTS.filter(p => {
-    if(!((STATE.l1==='ALL' || p.l1===STATE.l1) &&
+    if(!sharePasses(p))return false;
+    if(!options.ignoreTypes&&!((STATE.l1==='ALL' || p.l1===STATE.l1) &&
          (STATE.l2==='ALL' || p.l2===STATE.l2) &&
-         (STATE.l3==='ALL' || p.l3===STATE.l3) &&
-         sharePasses(p))) return false;
+         (STATE.l3==='ALL' || p.l3===STATE.l3)))return false;
     if(STATE.favOnly && !FAVS.has(p.code)) return false;
     if(q){
       if(companies.size)return companies.has(p.companyId);
@@ -1680,29 +1699,73 @@ function emptyChartGraphic(text){
     style:{ text:text, fill:ct().label, fontSize:13, fontWeight:500, textAlign:'center' }
   };
 }
+function bubbleProducts(){
+  return filteredProducts({ignoreTypes:true}).filter(p=>!isMoneyFund(p.code)&&
+    (STATE.bubbleTypes.has(p.l1+'|'+p.l2)||STATE.bubbleTypes.has(p.l1+'|'+p.l2+'|'+p.l3)));
+}
+function bubbleTypeSelected(key){
+  const parent=key.split('|').slice(0,2).join('|');
+  return STATE.bubbleTypes.has(parent)||STATE.bubbleTypes.has(key);
+}
+function renderBubbleTypes(){
+  const options=document.getElementById('matrixTypeOptions');
+  if(!options)return;
+  const groups=INVEST_HIERARCHY.filter(h=>h.l1!=='货币型'),signature=JSON.stringify(groups);
+  const checkbox=(key,label)=>'<label><input type="checkbox" value="'+escapeHtml(key)+'"><span>'+escapeHtml(label)+'</span></label>';
+  if(options.dataset.signature!==signature){
+    options.innerHTML=groups.map(h=>'<fieldset><legend>'+escapeHtml(h.l1)+'</legend>'+h.l2.map(t=>{
+      const parent=h.l1+'|'+t.key;
+      return '<div class="matrix-type-group">'+checkbox(parent,t.key)+(t.l3.length>1?'<div class="matrix-subtypes">'+t.l3.map(leaf=>checkbox(parent+'|'+leaf,leaf)).join('')+'</div>':'')+'</div>';
+    }).join('')+'</fieldset>').join('');
+    options.dataset.signature=signature;
+  }
+  options.querySelectorAll('input').forEach(input=>{
+    const keys=input.value.split('|');
+    if(keys.length===3){input.checked=bubbleTypeSelected(input.value);return;}
+    const group=groups.find(h=>h.l1===keys[0]).l2.find(t=>t.key===keys[1]);
+    const selected=group.l3.filter(leaf=>bubbleTypeSelected(input.value+'|'+leaf)).length;
+    input.checked=selected===group.l3.length;
+    input.indeterminate=selected>0&&!input.checked;
+  });
+  const labels=[];
+  for(const h of groups)for(const t of h.l2){
+    const selected=t.l3.filter(leaf=>bubbleTypeSelected(h.l1+'|'+t.key+'|'+leaf));
+    if(selected.length)labels.push(...(selected.length===t.l3.length?[t.key]:selected));
+  }
+  document.getElementById('matrixTypeSummary').textContent=labels.join('、')||'尚未勾选';
+  options.onchange=event=>{
+    const input=event.target;
+    if(input.type!=='checkbox')return;
+    const keys=input.value.split('|'),parent=keys.slice(0,2).join('|');
+    if(keys.length===2){
+      for(const key of STATE.bubbleTypes)if(key===parent||key.startsWith(parent+'|'))STATE.bubbleTypes.delete(key);
+    }else if(STATE.bubbleTypes.has(parent)){
+      STATE.bubbleTypes.delete(parent);
+      const group=groups.find(h=>h.l1===keys[0]).l2.find(t=>t.key===keys[1]);
+      group.l3.forEach(leaf=>STATE.bubbleTypes.add(parent+'|'+leaf));
+    }
+    if(input.checked)STATE.bubbleTypes.add(input.value);else STATE.bubbleTypes.delete(input.value);
+    renderBubble();
+  };
+}
+function linearAxisBounds(values){
+  if(!values.length)return [-1,1];
+  const low=Math.min(...values),high=Math.max(...values),span=high-low;
+  const padding=span>0?span*.08:Math.max(Math.abs(low)*.08,.01);
+  return [low-padding,high+padding];
+}
+function axisPercentLabel(value,bounds){
+  const precision=Math.max(0,Math.min(6,Math.ceil(-Math.log10((bounds[1]-bounds[0])/5))));
+  return Number(value.toFixed(precision))+'%';
+}
 function renderBubble(){
-  // 风险收益矩阵：X = 最大回撤(负值，越靠右回撤越浅)，Y = 近一年收益。"右上方"即低回撤+高收益=最优。
-  // 气泡大小 = 家族合并规模；颜色 = 投资大类
-  // ⚠ 货币基金硬排除：从机构销售角度，货币基金的"风险收益矩阵"位置无金融意义
-  //   （单位净值恒定 1.0，没有回撤维度，近一年收益与权益类不可比），不应混入对比图
-  const data = filteredProducts()
-    .filter(p => !isMoneyFund(p.code))  // ← 货币基金从源头排除
-    .map(p=>{
-      const pf = DS.perfMap[p.code]||{};
-      const gp = getPerf(p);
-      return { p, scale: gp.scale||0, y1: gp.y1, mdd: gp.mdd, mgr: pf.manager||p.manager };
-    }).filter(x=>x.y1!=null && x.mdd!=null);
-
-  const ys = data.map(x=>x.y1).sort((a,b)=>a-b);
-  const xs = data.map(x=>x.mdd).sort((a,b)=>a-b);
-  const p95y = ys.length ? ys[Math.floor(ys.length*0.95)] : 30;
-  const p05y = ys.length ? ys[Math.floor(ys.length*0.05)] : -10;
-  const p05x = xs.length ? xs[Math.floor(xs.length*0.05)] : -30;  // 最深回撤
-  const yMax = Math.min(120, Math.max(25, Math.ceil(p95y/5)*5 + 5));
-  const yMin = Math.max(-40, Math.min(-5, Math.floor(p05y/5)*5));
-  // X 轴：最大回撤是负值。xMin 取观测下限再外扩 5；xMax 留 2 余量到 0 附近，让"右=回撤浅"直观可见。
-  const xMin = Math.min(-5, Math.floor(p05x/5)*5 - 2);
-  const xMax = 2;
+  renderBubbleTypes();
+  const data = bubbleProducts().map(p=>{
+    const pf=DS.perfMap[p.code]||{},gp=getPerf(p);
+    return {p,scale:gp.scale||0,y1:gp.y1,mdd:gp.mdd,mgr:pf.manager||p.manager};
+  }).filter(x=>Number.isFinite(x.y1)&&Number.isFinite(x.mdd));
+  const xBounds=linearAxisBounds(data.map(x=>x.mdd)),yBounds=linearAxisBounds(data.map(x=>x.y1));
+  const [xMin,xMax]=xBounds,[yMin,yMax]=yBounds;
 
   const series = INVEST_HIERARCHY.map(h=>{
     const items = data.filter(x=>x.p.l1===h.l1).map(x=>{
@@ -1724,19 +1787,19 @@ function renderBubble(){
   const T=ct();
   bubbleChart.setOption({
     backgroundColor:'transparent',
-    graphic: data.length ? [] : [emptyChartGraphic('未找到符合条件的产品\n请调整筛选或搜索关键词')],
+    graphic: data.length ? [] : [emptyChartGraphic(STATE.bubbleTypes.size?'已选类型暂无可用的回撤与收益数据\n可调整类型或搜索条件':'请勾选要比较的产品类型')],
     // graphic 已移除，恢复 top:28 给散点更多绘图空间
     grid:{ left:56, right:30, top:28, bottom:64, containLabel:true },
-    legend:{ bottom:4, left:'center', itemWidth:10, itemHeight:10, textStyle:{color:T.legend,fontSize:12}, icon:'circle' },
+    legend:{ selectedMode:false, bottom:4, left:'center', itemWidth:10, itemHeight:10, textStyle:{color:T.legend,fontSize:12}, icon:'circle' },
     // X 轴：最大回撤（负值），数值由左到右递增（更接近 0 = 回撤更浅 = 更好）
     xAxis:{ type:'value', name:'最大回撤(%)  回撤越浅 →', nameLocation:'middle', nameGap:38,
       nameTextStyle:{color:T.name,fontSize:11},
       axisLine:{lineStyle:{color:T.axis}},
-      axisLabel:{color:T.label, formatter:v=> v.toFixed(0)+'%'},
+      axisLabel:{color:T.label, formatter:v=>axisPercentLabel(v,xBounds)},
       splitLine:{lineStyle:{color:T.split,type:'dashed'}},
       min:xMin, max:xMax },
     yAxis:{ type:'value', name:'↑ 近一年收益(%)', nameTextStyle:{color:T.name,fontSize:11,padding:[0,0,0,-30]},
-      axisLine:{lineStyle:{color:T.axis}}, axisLabel:{color:T.label,formatter:v=>v+'%'},
+      axisLine:{lineStyle:{color:T.axis}}, axisLabel:{color:T.label,formatter:v=>axisPercentLabel(v,yBounds)},
       splitLine:{lineStyle:{color:T.split,type:'dashed'}}, min:yMin, max:yMax },
     // 四象限提示已移到 panel-hint（HTML 层），不再用 echarts graphic 绝对定位，
     // 避免与 panel-hint 文字在 canvas 顶部叠压
@@ -1752,7 +1815,7 @@ function renderBubble(){
           '<tr><td style="padding:1px 12px 1px 0">合并规模</td><td style="color:'+T.tipText+';font-weight:600">'+(sc>0?fmt.scale(sc)+' 亿':'<span style=\"color:'+T.label+'\">未披露</span>')+'</td></tr>'+
           '<tr><td style="padding:1px 12px 1px 0">最大回撤</td><td style="color:#FF5C5C;font-weight:600">'+(mdd!=null?fmt.signed(mdd,2)+'%':'--')+'</td></tr>'+
           '<tr><td style="padding:1px 12px 1px 0">近一年收益</td><td style="color:'+(y1>=0?'#FF5C5C':'#00C853')+';font-weight:600">'+fmt.signed(y1,2)+'%</td></tr>'+
-          '</table><div style="color:'+T.label+';font-size:11px;margin-top:6px;border-top:1px solid '+T.tipBorder+';padding-top:6px">点击查看详情</div>';
+          '</table><div style="margin-top:6px">申购状态 '+escapeHtml(STATUS_META[statusCode]?.label||'申购状态未核验')+'</div><div style="color:'+T.label+';font-size:11px;margin-top:6px;border-top:1px solid '+T.tipBorder+';padding-top:6px">点击查看详情</div>';
       } },
     series: series
   }, true);
@@ -1977,7 +2040,7 @@ function renderTable(){
     const subtypeCell = '<span class="cell-sub-tag" title="'+escapeHtml(subtypeTitle)+'">'+escapeHtml(subtype)+'</span>';
     return '<tr title="净值日期 '+escapeHtml(pf.jzrq||'--')+' · 规模：折叠为已披露份额合计，展开为当前份额" data-code="'+p.code+'" class="'+(STATE.selectedCode===p.code?'selected':'')+'">'+
       '<td><span class="fav-star'+(isFav(p.code)?' on':'')+'" data-fav="'+p.code+'" title="加入 / 移出自选">'+(isFav(p.code)?'★':'☆')+'</span>'+
-        '<span class="cell-status-dot" style="background:'+sm.color+'" title="'+escapeHtml(p.status.label)+'"></span>'+
+        '<span class="cell-status-dot" style="background:'+sm.color+'" title="'+escapeHtml(p.status.label)+'" aria-label="'+escapeHtml(p.status.label)+'"></span>'+
         '<span class="cell-name">'+escapeHtml(p.name)+'</span><span class="cell-code">'+p.code+(pf.jzrq?' · '+escapeHtml(pf.jzrq):'')+'</span>'+shareTag+sanityFlag+'</td>'+
       '<td>'+mgrCell+'</td>'+
       '<td><span class="cell-cat-badge" style="color:'+l1Color(p.l1)+';border:1px solid '+l1Color(p.l1)+'40">'+p.l1+'</span></td>'+

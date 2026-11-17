@@ -509,7 +509,7 @@ updateTableHint=function(){
 };
 const referenceRenderBubble=renderBubble;
 renderBubble=function(){referenceRenderBubble();
-  const list=filteredProducts().filter(p=>!isMoneyFund(p.code));
+  const list=bubbleProducts();
   const count=list.filter(p=>finite(getPerf(p).mdd)!=null&&finite(getPerf(p).y1)!=null).length;
   document.getElementById('matrixCoverage').textContent=count.toLocaleString('zh-CN')+' / '+list.length.toLocaleString('zh-CN')+' 只具备历史回撤及一年收益';
   const original=bubbleChart.getOption().tooltip[0].formatter;

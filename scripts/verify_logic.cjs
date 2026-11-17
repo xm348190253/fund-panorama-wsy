@@ -200,6 +200,34 @@ STATE.search='未核验';assert.equal(filteredProducts()[0].code,'000108');
 STATE.search='摩根基金管理（中国）有限公司';assert.equal(filteredProducts()[0].code,'000107','legal name and displayed company short name resolve consistently');
 STATE.search='';assert.equal(filteredProducts().length,8,'clearing search restores all fund families');
 setProductsFromPool(searchProducts);DS.perfMap=searchPerf;
+const chartProducts=PRODUCTS.map(p=>({...p})),chartPerf=DS.perfMap,chartGet=document.getElementById;
+setProductsFromPool([
+  {code:'000201',name:'测试长期纯债A',type:'债券型-长债',purchaseStatus:'限大额'},
+  {code:'000202',name:'测试中短债A',type:'债券型-中短债',purchaseStatus:'开放申购'},
+  {code:'000203',name:'测试主动股票A',type:'股票型',purchaseStatus:'开放申购'}
+]);
+DS.perfMap={'000201':{scale:10,y1:.35,mdd:-.1},'000202':{scale:20,y1:.4,mdd:-.03},'000203':{scale:30,y1:150,mdd:-80}};
+STATE.search='';STATE.l1='ALL';STATE.bubbleTypes=new Set(['债券型|纯债']);
+assert.equal(bubbleProducts().map(p=>p.code).join(','),'000201,000202','scatter defaults to pure bonds');
+STATE.l1='股票型';assert.equal(filteredProducts().length,1);assert.equal(bubbleProducts().length,2,'scatter selections operate independently of table type filters');STATE.l1='ALL';
+let capturedBubble;
+document.getElementById=id=>id==='matrixTypeOptions'?null:chartGet(id);
+bubbleChart={setOption(option){capturedBubble=option;},off(){},on(){}};
+referenceRenderBubble();
+assert.equal(capturedBubble.series.reduce((n,s)=>n+s.data.length,0),2);
+assert.equal(capturedBubble.xAxis.type,'value');assert.equal(capturedBubble.yAxis.type,'value');
+assert(capturedBubble.xAxis.min<-.1&&capturedBubble.xAxis.max>-.03);
+assert(capturedBubble.yAxis.min>0&&capturedBubble.yAxis.max<1,'narrow return distributions get narrow linear axes');
+assert.notEqual(capturedBubble.xAxis.axisLabel.formatter(-.1),capturedBubble.xAxis.axisLabel.formatter(-.03),'narrow axes keep distinguishable decimal labels');
+STATE.bubbleTypes.add('股票型|主动股票');referenceRenderBubble();
+assert.equal(capturedBubble.series.reduce((n,s)=>n+s.data.length,0),3,'checkbox selections form a union');
+assert(capturedBubble.xAxis.min<-80&&capturedBubble.yAxis.max>150,'axis bounds include every point and outlier');
+STATE.bubbleTypes.delete('债券型|纯债');assert.equal(bubbleProducts()[0].code,'000203');
+STATE.bubbleTypes.clear();referenceRenderBubble();assert.equal(capturedBubble.series.length,0);assert(capturedBubble.graphic[0].style.text.includes('勾选'));
+DS.perfMap['000201']={scale:10,y1:0,mdd:0};STATE.bubbleTypes.add('债券型|纯债');referenceRenderBubble();
+assert(capturedBubble.xAxis.min<0&&capturedBubble.xAxis.max>0);assert(capturedBubble.yAxis.min<0&&capturedBubble.yAxis.max>0);
+setProductsFromPool(chartProducts);DS.perfMap=chartPerf;document.getElementById=chartGet;STATE.bubbleTypes=new Set(['债券型|纯债']);bubbleChart=null;
+
 `,context);
 assert(!html.includes('COMPANY_AUM ='));
 assert(!html.includes('setInterval('),'no automatic refresh interval');
