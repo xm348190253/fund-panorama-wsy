@@ -435,24 +435,29 @@ button:focus-visible,input:focus-visible,a:focus-visible,select:focus-visible{ou
 .ptable .cell-name{white-space:normal;line-height:1.6}
 .ptable .cell-code{display:block;margin-top:4px;white-space:normal}
 
-.matrix-type-picker{margin:0 20px 12px;border:1px solid var(--border);border-radius:10px;background:var(--glass-bg);color:var(--text-2);font-size:12px}
-.matrix-type-picker summary{padding:11px 14px;cursor:pointer;font-weight:600}
-#matrixTypeSummary{margin-left:10px;color:var(--accent);font-weight:500}
-.matrix-type-note{padding:0 14px 10px;color:var(--text-3);line-height:1.7}
-.matrix-type-options{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;padding:0 14px 14px;max-height:330px;overflow:auto}
-.matrix-type-options fieldset{margin:0;padding:8px 10px;border:1px solid var(--border-soft);border-radius:7px;min-width:0}
-.matrix-type-options legend{padding:0 5px;color:var(--text-2);font-weight:600}
-.matrix-type-options label{display:inline-flex;align-items:center;gap:6px;margin:5px 12px 5px 0;cursor:pointer;line-height:1.6}
-.matrix-type-group{padding:3px 0}.matrix-subtypes{margin-left:20px;padding-left:10px;border-left:1px solid var(--border-soft);color:var(--text-3)}
-.matrix-type-options input{accent-color:var(--accent);width:15px;height:15px;cursor:pointer}
 .purchase-status-legend{display:flex;flex-wrap:wrap;align-items:center;gap:10px 18px;padding:0 20px 14px;color:var(--text-3);font-size:11px}
 .purchase-status-legend span{display:inline-flex;gap:6px;align-items:center}.purchase-status-legend i{display:inline-block;width:8px;height:8px;border-radius:50%}
-@media(max-width:600px){.matrix-type-options{grid-template-columns:1fr}.matrix-type-picker{margin-left:14px;margin-right:14px}}
 .ptable tbody td:first-child,.ptable .cell-name,table th:first-child,table td:first-child{font-weight:700}
 .kpi-card,.dr-metric,.dr-mgr-quote,.alt-card{text-align:center}
 .kpi-value{justify-content:center}
 .flag-item{text-align:center;justify-content:center}
 .status-pill.code-closed{font-weight:650}
+
+/* One hierarchy selection drives every analysis component. */
+.type-choice{display:inline-flex;align-items:stretch;gap:0}
+.type-choice .chip{border-radius:999px 0 0 999px;padding-right:8px}
+.type-choice input,.tree-row input{width:14px;height:14px;accent-color:var(--accent);cursor:pointer;flex-shrink:0}
+.type-expand{border:1px solid var(--glass-border);border-left:0;border-radius:0 999px 999px 0;background:var(--glass-bg);color:var(--text-2);padding:0 9px;font:inherit;cursor:pointer}
+.type-expand:hover{color:var(--accent);background:var(--accent-soft)}
+.tree-row-name{gap:5px;align-items:center}
+.tree-row-name button{border:0;padding:0;background:none;color:inherit;font:inherit;font-weight:700;line-height:1.7;text-align:left;cursor:pointer;overflow-wrap:anywhere}
+.tree-row-name button:hover{color:var(--accent)}
+.tree-row-name button:disabled{cursor:default}
+.tree-swatch{width:8px;height:12px;margin-top:0}
+.tree-list-head,.tree-row{grid-template-columns:minmax(0,1fr) 70px 48px;gap:6px}
+.selection-inline{display:flex;align-items:baseline;justify-content:center;flex-wrap:wrap;gap:5px 14px;margin-top:10px;color:var(--text-2);font-size:11px;line-height:1.7}
+.selection-inline b{font-weight:700;color:var(--text-1);font-variant-numeric:tabular-nums;margin:0 2px}
+
 </style>
 </head>
 <body>
@@ -542,9 +547,10 @@ button:focus-visible,input:focus-visible,a:focus-visible,select:focus-visible{ou
     <div class="kpi-value"><span id="kpiCount">--</span><span class="kpi-unit">只</span></div>
     <div class="kpi-sub" id="kpiCountSub">&nbsp;</div>
   </div>
-  <div class="kpi-card">
-    <div class="kpi-label">平均近一年收益率</div>
+  <div class="kpi-card selection-card">
+    <div class="kpi-label">当前筛选 · 平均近一年收益率</div>
     <div class="kpi-value"><span id="kpiSharpe">--</span></div>
+    <div class="selection-inline"><span>规模 <b id="selectionScale">/</b> 亿元</span><span>产品数 <b id="selectionCount">/</b> <span id="selectionCountUnit">只</span></span></div>
     <div class="kpi-sub" id="kpiSharpeSub">&nbsp;</div>
   </div>
 </section>
@@ -555,11 +561,6 @@ button:focus-visible,input:focus-visible,a:focus-visible,select:focus-visible{ou
       <div class="panel-title"><span id="matrixTitle">风险收益矩阵</span> <span id="matrixCoverage" style="font-size:10px;font-weight:400;color:var(--text-3)"></span></div>
       <div class="panel-hint" id="matrixHint">最大回撤 × 近一年收益 · 大小表示规模 · 黄圈表示暂停申购</div>
     </div>
-    <details class="matrix-type-picker">
-      <summary>产品类型多选 <span id="matrixTypeSummary">纯债</span></summary>
-      <div class="matrix-type-note">勾选类型后叠加比较，仅控制本图。搜索、自选和份额设置同时生效。</div>
-      <div id="matrixTypeOptions" class="matrix-type-options"></div>
-    </details>
     <div id="chartBubble" class="chart-box"></div>
     <div id="moneyMatrix" class="money-matrix" hidden>
       <div class="matrix-section-title">货币基金 · 规模与七日年化</div>
@@ -981,7 +982,7 @@ function themesOverlap(a, b){
 // ============================================================
 // 主交互逻辑
 // ============================================================
-const STATE = { l1:'ALL', l2:'ALL', l3:'ALL', showAllShares:false, sortKey:'scale', sortAsc:false, selectedCode:null, activeTab:'overview', search:'', favOnly:false, bubbleTypes:new Set(['债券型|纯债']) };
+const STATE = { l1:'债券型', l2:'纯债', l3:'ALL', typeSelection:new Set(['债券型|纯债|长期纯债','债券型|纯债|中短债']), showAllShares:false, sortKey:'scale', sortAsc:false, selectedCode:null, activeTab:'overview', search:'', favOnly:false };
 // 自选清单（localStorage 持久化，跨会话保留销售自己常用的产品）
 const FAVS = (function(){ try{ return new Set(JSON.parse(localStorage.getItem('fm_favs')||'[]')); }catch(_){ return new Set(); } })();
 function isFav(code){ return FAVS.has(code); }
@@ -1567,9 +1568,7 @@ function filteredProducts(options={}){
   const companies = matchingCompanies(q);
   return PRODUCTS.filter(p => {
     if(!sharePasses(p))return false;
-    if(!options.ignoreTypes&&!((STATE.l1==='ALL' || p.l1===STATE.l1) &&
-         (STATE.l2==='ALL' || p.l2===STATE.l2) &&
-         (STATE.l3==='ALL' || p.l3===STATE.l3)))return false;
+    if(!options.ignoreTypes&&!typePasses(p))return false;
     if(STATE.favOnly && !FAVS.has(p.code)) return false;
     if(q){
       if(companies.size)return companies.has(p.companyId);
@@ -1599,111 +1598,94 @@ function getPerf(){}
 function sortedProducts(){}
 function escapeHtml(s){ return String(s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
-// 一级（投资大类）
-function renderChips(){
-  const bar = document.getElementById('chipBar');
-  bar.querySelectorAll('.chip[data-l1]:not([data-l1="ALL"])').forEach(el=>el.remove());
-  const passList = PRODUCTS.filter(sharePasses);
-  document.getElementById('chipCountALL').textContent = passList.length;
-  INVEST_HIERARCHY.forEach(h=>{
-    // 一级 chip 显示"当前份额视图下"的命中数，避免"货币型 13 / 实际 3"这种联动 bug
-    const cnt = passList.filter(p=>p.l1===h.l1).length;
-    if(cnt===0) return;
-    const btn = document.createElement('button');
-    btn.className='chip'; btn.dataset.l1=h.l1;
-    btn.innerHTML = '<span class="chip-color-dot" style="background:'+h.color+'"></span>'+h.l1+' <span class="chip-count">'+cnt+'</span>';
-    bar.appendChild(btn);
+function typeKey(p){return [p.l1,p.l2,p.l3].join('|');}
+function typeLeaves(key){
+  const keys=key?key.split('|'):[];
+  return INVEST_HIERARCHY.flatMap(h=>h.l2.flatMap(t=>t.l3.map(leaf=>[h.l1,t.key,leaf].join('|'))))
+    .filter(path=>keys.every((part,index)=>path.split('|')[index]===part));
+}
+function typePasses(p){return STATE.typeSelection===null||STATE.typeSelection.has(typeKey(p));}
+function typeCheckState(key){
+  const leaves=typeLeaves(key),count=leaves.filter(leaf=>STATE.typeSelection===null||STATE.typeSelection.has(leaf)).length;
+  return {checked:leaves.length>0&&count===leaves.length,mixed:count>0&&count<leaves.length};
+}
+function toggleTypeSelection(key,checked){
+  const selection=STATE.typeSelection===null?new Set(typeLeaves('')):new Set(STATE.typeSelection);
+  typeLeaves(key).forEach(leaf=>{if(checked)selection.add(leaf);else selection.delete(leaf);});
+  STATE.typeSelection=selection.size===typeLeaves('').length?null:selection;
+  const paths=STATE.typeSelection===null?[]:[...selection].map(path=>path.split('|')),first=paths[0]||[];
+  STATE.l1=paths.length&&paths.every(path=>path[0]===first[0])?first[0]:'ALL';
+  STATE.l2=STATE.l1!=='ALL'&&paths.every(path=>path[1]===first[1])?first[1]:'ALL';
+  STATE.l3='ALL';
+}
+function syncTypeControls(){
+  document.querySelectorAll('input[data-type]').forEach(input=>{
+    const state=typeCheckState(input.dataset.type);input.checked=state.checked;input.indeterminate=state.mixed;
+    input.closest('.chip')?.classList.toggle('active',state.checked||state.mixed);
   });
-  bar.querySelectorAll('.chip').forEach(c=>c.classList.toggle('active',c.dataset.l1===STATE.l1));
-  bar.onclick = e=>{
-    const btn = e.target.closest('.chip'); if(!btn) return;
-    const v = btn.dataset.l1; if(v===undefined) return;
-    if (STATE.l1===v) return;
-    STATE.l1 = v; STATE.l2='ALL'; STATE.l3='ALL';
-    bar.querySelectorAll('.chip').forEach(c=>c.classList.toggle('active', c.dataset.l1===v));
-    renderSubChips();
-    renderAll();
+  document.querySelector('#chipBar .chip[data-l1="ALL"]')?.classList.toggle('active',STATE.typeSelection===null);
+}
+function browseTypes(key){
+  const keys=key?key.split('|'):[];
+  STATE.l1=keys[0]||'ALL';STATE.l2=keys[1]||'ALL';STATE.l3=keys[2]||'ALL';
+  renderSubChips();renderAll();
+}
+function categoryChoice(key,name,count,level){
+  return '<div class="type-choice"><label class="chip"'+(level===1?' data-l1="'+escapeHtml(name)+'"':'')+'><input type="checkbox" data-type="'+escapeHtml(key)+'" aria-label="选择'+escapeHtml(name)+'">'+
+    '<span>'+escapeHtml(name)+'</span><span class="chip-count">'+count.toLocaleString('zh-CN')+'</span></label>'+
+    (level<3?'<button type="button" class="type-expand" data-browse="'+escapeHtml(key)+'" aria-label="查看'+escapeHtml(name)+'的细分">›</button>':'')+'</div>';
+}
+function bindCategoryBar(bar){
+  bar.onchange=event=>{
+    const input=event.target.closest('input[data-type]');if(!input)return;
+    toggleTypeSelection(input.dataset.type,input.checked);
+    renderSubChips();renderAll();
+  };
+  bar.onclick=event=>{
+    const browse=event.target.closest('button[data-browse]');if(browse){browseTypes(browse.dataset.browse);return;}
+    if(event.target.closest('button[data-l1="ALL"]')){STATE.typeSelection=null;browseTypes('');}
   };
 }
-// 二级（策略）
+function renderChips(){
+  const bar=document.getElementById('chipBar'),list=PRODUCTS.filter(sharePasses);
+  bar.querySelectorAll('.type-choice').forEach(el=>el.remove());
+  document.getElementById('chipCountALL').textContent=list.length.toLocaleString('zh-CN');
+  INVEST_HIERARCHY.forEach(h=>{
+    const count=list.filter(p=>p.l1===h.l1).length;if(!count)return;
+    const holder=document.createElement('div');holder.className='type-choice';
+    holder.innerHTML=categoryChoice(h.l1,h.l1,count,1).replace(/^<div class="type-choice">|<\/div>$/g,'');
+    bar.appendChild(holder);
+  });
+  bindCategoryBar(bar);syncTypeControls();
+}
 function renderSubChips(){
-  const bar = document.getElementById('chipBarSub');
-  bar.querySelectorAll('.chip-sub:not([data-sub="ALL"])').forEach(el=>el.remove());
-  const tail = document.getElementById('chipBarSubTail');
-  if(STATE.l1==='ALL'){
-    bar.style.display='none';
-    // 同时也把三级藏起来
-    const sub3 = document.getElementById('chipBarSub3');
-    if(sub3) sub3.style.display='none';
-    return;
-  }
-  bar.style.display='';
-  const h = L1_BY_KEY[STATE.l1];
-  if(!h) return;
-  const baseList = PRODUCTS.filter(p=>p.l1===STATE.l1 && sharePasses(p));
-  h.l2.forEach(l2=>{
-    const cnt = baseList.filter(p=>p.l2===l2.key).length;
-    if(cnt===0) return;
-    const btn = document.createElement('button');
-    btn.className='chip chip-sub'; btn.dataset.sub=l2.key;
-    btn.innerHTML = l2.key+' <span class="chip-count">'+cnt+'</span>';
-    bar.insertBefore(btn, tail);
-  });
-  bar.querySelectorAll('.chip-sub').forEach(c=>c.classList.toggle('active', c.dataset.sub===STATE.l2));
-  tail.innerHTML = '当前命中 <b style="color:var(--text-1)">'+filteredProducts().length+'</b> 只';
-  renderSubChips3();
+  const bar=document.getElementById('chipBarSub'),third=document.getElementById('chipBarSub3');
+  bar.style.display=STATE.l1==='ALL'?'none':'';
+  if(STATE.l1==='ALL'){third.style.display='none';return;}
+  const group=L1_BY_KEY[STATE.l1];if(!group)return;
+  const list=PRODUCTS.filter(p=>sharePasses(p)&&p.l1===STATE.l1);
+  bar.innerHTML='<div class="chip-bar-label">'+escapeHtml(STATE.l1)+' · 二级策略</div>'+group.l2.map(t=>{
+    const count=list.filter(p=>p.l2===t.key).length;
+    return count?categoryChoice(STATE.l1+'|'+t.key,t.key,count,2):'';
+  }).join('');
+  renderSubChips3();syncTypeControls();
 }
-// 三级（细分）
 function renderSubChips3(){
-  const bar = document.getElementById('chipBarSub3');
-  if(!bar) return;
-  bar.querySelectorAll('.chip-sub3:not([data-sub3="ALL"])').forEach(el=>el.remove());
-  const tail = document.getElementById('chipBarSub3Tail');
-  if(STATE.l1==='ALL' || STATE.l2==='ALL'){
-    bar.style.display='none';
-    return;
-  }
-  bar.style.display='';
-  const h = L1_BY_KEY[STATE.l1];
-  if(!h) return;
-  const l2def = h.l2.find(x=>x.key===STATE.l2);
-  if(!l2def) return;
-  const baseList = PRODUCTS.filter(p=>p.l1===STATE.l1 && p.l2===STATE.l2 && sharePasses(p));
-  l2def.l3.forEach(l3key=>{
-    const cnt = baseList.filter(p=>p.l3===l3key).length;
-    if(cnt===0) return;
-    const btn = document.createElement('button');
-    btn.className='chip chip-sub3'; btn.dataset.sub3=l3key;
-    btn.innerHTML = l3key+' <span class="chip-count">'+cnt+'</span>';
-    bar.insertBefore(btn, tail);
-  });
-  bar.querySelectorAll('.chip-sub3').forEach(c=>c.classList.toggle('active', c.dataset.sub3===STATE.l3));
-  if(tail) tail.innerHTML = '细分命中 <b style="color:var(--text-1)">'+filteredProducts().length+'</b> 只';
+  const bar=document.getElementById('chipBarSub3');
+  bar.style.display=STATE.l1==='ALL'||STATE.l2==='ALL'?'none':'';
+  if(bar.style.display==='none')return;
+  const group=L1_BY_KEY[STATE.l1]?.l2.find(t=>t.key===STATE.l2);if(!group)return;
+  const list=PRODUCTS.filter(p=>sharePasses(p)&&p.l1===STATE.l1&&p.l2===STATE.l2);
+  bar.innerHTML='<div class="chip-bar-label">'+escapeHtml(STATE.l2)+' · 三级细分</div>'+group.l3.map(leaf=>{
+    const count=list.filter(p=>p.l3===leaf).length;
+    return count?categoryChoice(STATE.l1+'|'+STATE.l2+'|'+leaf,leaf,count,3):'';
+  }).join('');
 }
-function bindSubChipsEvents(){
-  const bar2 = document.getElementById('chipBarSub');
-  bar2.addEventListener('click', e=>{
-    const btn = e.target.closest('.chip-sub'); if(!btn) return;
-    const s = btn.dataset.sub; if(STATE.l2===s) return;
-    STATE.l2 = s; STATE.l3 = 'ALL';
-    bar2.querySelectorAll('.chip-sub').forEach(c=>c.classList.toggle('active', c.dataset.sub===s));
-    renderSubChips3();
-    renderAll();
-  });
-  const bar3 = document.getElementById('chipBarSub3');
-  if(bar3){
-    bar3.addEventListener('click', e=>{
-      const btn = e.target.closest('.chip-sub3'); if(!btn) return;
-      const s = btn.dataset.sub3; if(STATE.l3===s) return;
-      STATE.l3 = s;
-      bar3.querySelectorAll('.chip-sub3').forEach(c=>c.classList.toggle('active', c.dataset.sub3===s));
-      renderAll();
-    });
-  }
-}
+function bindSubChipsEvents(){['chipBarSub','chipBarSub3'].forEach(id=>bindCategoryBar(document.getElementById(id)));}
 function renderKpi(){}
 
-function bubbleSize(s){ return s>0 ? (10 + Math.sqrt(s)*2.0) : 8; }
+function bubbleSize(s){return s>0?Math.min(22,6+Math.sqrt(s)*.45):6;}
+function scatterZoom(){return [{type:'slider',xAxisIndex:0,bottom:28,height:16,filterMode:'none'},{type:'slider',yAxisIndex:0,right:8,width:14,filterMode:'none'},{type:'inside',xAxisIndex:0,filterMode:'none',zoomOnMouseWheel:'ctrl',moveOnMouseWheel:false},{type:'inside',yAxisIndex:0,filterMode:'none',zoomOnMouseWheel:'ctrl',moveOnMouseWheel:false}];}
 function emptyChartGraphic(text){
   return {
     type:'text',
@@ -1713,55 +1695,7 @@ function emptyChartGraphic(text){
     style:{ text:text, fill:ct().label, fontSize:13, fontWeight:500, textAlign:'center' }
   };
 }
-function bubbleProducts(){
-  return filteredProducts({ignoreTypes:true}).filter(p=>
-    (STATE.bubbleTypes.has(p.l1+'|'+p.l2)||STATE.bubbleTypes.has(p.l1+'|'+p.l2+'|'+p.l3)));
-}
-function bubbleTypeSelected(key){
-  const parent=key.split('|').slice(0,2).join('|');
-  return STATE.bubbleTypes.has(parent)||STATE.bubbleTypes.has(key);
-}
-function renderBubbleTypes(){
-  const options=document.getElementById('matrixTypeOptions');
-  if(!options)return;
-  const groups=INVEST_HIERARCHY,signature=JSON.stringify(groups);
-  const checkbox=(key,label)=>'<label><input type="checkbox" value="'+escapeHtml(key)+'"><span>'+escapeHtml(label)+'</span></label>';
-  if(options.dataset.signature!==signature){
-    options.innerHTML=groups.map(h=>'<fieldset><legend>'+escapeHtml(h.l1)+'</legend>'+h.l2.map(t=>{
-      const parent=h.l1+'|'+t.key;
-      return '<div class="matrix-type-group">'+checkbox(parent,t.key)+(t.l3.length>1?'<div class="matrix-subtypes">'+t.l3.map(leaf=>checkbox(parent+'|'+leaf,leaf)).join('')+'</div>':'')+'</div>';
-    }).join('')+'</fieldset>').join('');
-    options.dataset.signature=signature;
-  }
-  options.querySelectorAll('input').forEach(input=>{
-    const keys=input.value.split('|');
-    if(keys.length===3){input.checked=bubbleTypeSelected(input.value);return;}
-    const group=groups.find(h=>h.l1===keys[0]).l2.find(t=>t.key===keys[1]);
-    const selected=group.l3.filter(leaf=>bubbleTypeSelected(input.value+'|'+leaf)).length;
-    input.checked=selected===group.l3.length;
-    input.indeterminate=selected>0&&!input.checked;
-  });
-  const labels=[];
-  for(const h of groups)for(const t of h.l2){
-    const selected=t.l3.filter(leaf=>bubbleTypeSelected(h.l1+'|'+t.key+'|'+leaf));
-    if(selected.length)labels.push(...(selected.length===t.l3.length?[t.key]:selected));
-  }
-  document.getElementById('matrixTypeSummary').textContent=labels.join('、')||'尚未勾选';
-  options.onchange=event=>{
-    const input=event.target;
-    if(input.type!=='checkbox')return;
-    const keys=input.value.split('|'),parent=keys.slice(0,2).join('|');
-    if(keys.length===2){
-      for(const key of STATE.bubbleTypes)if(key===parent||key.startsWith(parent+'|'))STATE.bubbleTypes.delete(key);
-    }else if(STATE.bubbleTypes.has(parent)){
-      STATE.bubbleTypes.delete(parent);
-      const group=groups.find(h=>h.l1===keys[0]).l2.find(t=>t.key===keys[1]);
-      group.l3.forEach(leaf=>STATE.bubbleTypes.add(parent+'|'+leaf));
-    }
-    if(input.checked)STATE.bubbleTypes.add(input.value);else STATE.bubbleTypes.delete(input.value);
-    renderBubble();
-  };
-}
+function bubbleProducts(){return filteredProducts();}
 function linearAxisBounds(values){
   if(!values.length)return [-1,1];
   const low=Math.min(...values),high=Math.max(...values),span=high-low;
@@ -1773,14 +1707,13 @@ function axisPercentLabel(value,bounds){
   return Number(value.toFixed(precision))+'%';
 }
 function renderBubble(){
-  renderBubbleTypes();
-  const selected=bubbleProducts(),hasMoney=[...STATE.bubbleTypes].some(key=>key.startsWith('货币型|'));
-  const hasRisk=[...STATE.bubbleTypes].some(key=>!key.startsWith('货币型|'))||!STATE.bubbleTypes.size;
+  const selected=bubbleProducts(),hasMoney=selected.some(p=>isMoneyFund(p.code));
+  const hasRisk=selected.some(p=>!isMoneyFund(p.code))||!hasMoney;
   const riskHost=document.getElementById('chartBubble'),moneyHost=document.getElementById('moneyMatrix');
   if(riskHost?.style)riskHost.style.display=hasRisk?'':'none';
   if(moneyHost)moneyHost.hidden=!hasMoney;
   const title=document.getElementById('matrixTitle');if(title)title.textContent=hasMoney?(hasRisk?'风险收益矩阵 / 货币收益分析':'货币基金收益分析'):'风险收益矩阵';
-  const hint=document.getElementById('matrixHint');if(hint)hint.textContent=hasMoney&&!hasRisk?'规模 × 七日年化 · 黄圈表示暂停申购':'最大回撤 × 近一年收益 · 大小表示规模 · 黄圈表示暂停申购';
+  const hint=document.getElementById('matrixHint');if(hint)hint.textContent=hasMoney&&!hasRisk?'规模 × 七日年化 · 黄圈为暂停申购 · 拖动滑块缩放':'最大回撤 × 近一年收益 · 黄圈为暂停申购 · 拖动滑块缩放';
   renderMoneyBubble(hasMoney?selected.filter(p=>isMoneyFund(p.code)):[],hasMoney);
   const data = selected.filter(p=>!isMoneyFund(p.code)).map(p=>{
     const pf=DS.perfMap[p.code]||{},gp=getPerf(p);
@@ -1790,7 +1723,7 @@ function renderBubble(){
   const [xMin,xMax]=xBounds,[yMin,yMax]=yBounds;
 
   const series = INVEST_HIERARCHY.map(h=>{
-    const items = data.filter(x=>x.p.l1===h.l1).map(x=>{
+    const items = data.filter(x=>x.p.l1===h.l1).sort((a,b)=>b.scale-a.scale).map(x=>{
       const isStopped = x.p.status.code==='closed';
       return {
         name: x.p.name,
@@ -1798,20 +1731,22 @@ function renderBubble(){
         value: [x.mdd, x.y1, x.scale, x.p.code, x.mgr, x.p.status.code, x.p.l1, x.p.l2, x.p.l3],
         symbolSize: bubbleSize(x.scale),
         itemStyle: {
-          borderColor: isStopped ? STATUS_META.closed.color : 'transparent',
-          borderWidth: isStopped?2:0, opacity:0.95
+          borderColor: isStopped?STATUS_META.closed.color:scatterColor(h.l1),
+          borderWidth:isStopped?2:.8,opacity:.58
         }
       };
     });
-    return { name:h.l1, type:'scatter', data:items, color:scatterColor(h.l1), emphasis:{ focus:'series', scale:1.15 } };
+    return { name:h.l1, type:'scatter', data:items, color:scatterColor(h.l1), emphasis:{focus:'self',scale:1.5,itemStyle:{opacity:1,borderWidth:2,shadowBlur:8,shadowColor:'rgba(0,0,0,.2)'}} };
   }).filter(s=>s.data.length);
 
   const T=ct();
   bubbleChart.setOption({
     backgroundColor:'transparent',
-    graphic: data.length ? [] : [emptyChartGraphic(STATE.bubbleTypes.size?'已选类型暂无可用的回撤与收益数据\n可调整类型或搜索条件':'请勾选要比较的产品类型')],
+    graphic: data.length ? [] : [emptyChartGraphic(STATE.typeSelection===null||STATE.typeSelection.size?'已选类型暂无可用的回撤与收益数据\n可调整类型或搜索条件':'请勾选要比较的产品类型')],
     // graphic 已移除，恢复 top:28 给散点更多绘图空间
-    grid:{ left:56, right:30, top:28, bottom:64, containLabel:true },
+    grid:{left:56,right:60,top:34,bottom:100,containLabel:true},
+    dataZoom:scatterZoom(),
+    toolbox:{left:58,top:0,feature:{dataZoom:{yAxisIndex:0,title:{zoom:'框选放大',back:'还原缩放'}},restore:{title:'重置缩放'}}},
     legend:{ selectedMode:false, bottom:4, left:'center', itemWidth:10, itemHeight:10, textStyle:{color:T.legend,fontSize:12}, icon:'circle' },
     // X 轴：最大回撤（负值），数值由左到右递增（更接近 0 = 回撤更浅 = 更好）
     xAxis:{ type:'value', name:'最大回撤(%)  回撤越浅 →', nameLocation:'middle', nameGap:38,
@@ -1860,7 +1795,9 @@ function renderMoneyBubble(list,visible){
   xb[0]=Math.max(0,xb[0]);
   moneyChart.setOption({backgroundColor:'transparent',
     graphic:rows.length?[]:[emptyChartGraphic('已选货币基金暂无有效规模与七日年化数据')],
-    grid:{left:56,right:30,top:36,bottom:66,containLabel:true},
+    grid:{left:56,right:60,top:36,bottom:100,containLabel:true},
+    dataZoom:scatterZoom(),
+    toolbox:{left:58,top:0,feature:{dataZoom:{yAxisIndex:0,title:{zoom:'框选放大',back:'还原缩放'}},restore:{title:'重置缩放'}}},
     xAxis:{type:'value',name:'已披露规模（亿元）',nameLocation:'middle',nameGap:38,min:xb[0],max:xb[1],nameTextStyle:{color:T.name},axisLabel:{color:T.label,formatter:v=>Number(v.toFixed(xb[1]-xb[0]<10?2:0)).toLocaleString('zh-CN')},splitLine:{lineStyle:{color:T.split,type:'dashed'}}},
     yAxis:{type:'value',name:'七日年化（%）',min:yb[0],max:yb[1],nameTextStyle:{color:T.name},axisLabel:{color:T.label,formatter:v=>axisPercentLabel(v,yb)},splitLine:{lineStyle:{color:T.split,type:'dashed'}}},
     tooltip:{backgroundColor:T.tipBg,borderColor:T.tipBorder,textStyle:{color:T.tipText},confine:true,formatter:pt=>{
@@ -1872,7 +1809,7 @@ function renderMoneyBubble(list,visible){
         metric('收益日期',escapeHtml(pf.qrnhAsOf||pf.jzrq||'未披露'))+metric('规模日期',escapeHtml(pf.scaleDate||'未披露'))+
         (p.status.code==='closed'?'<div class="status-pill code-closed">暂停申购</div>':'')+'<div style="margin-top:6px">点击查看详情</div>';
     }},
-    series:[{name:'货币型',type:'scatter',symbolSize:9,color:scatterColor('货币型'),data:rows.map(x=>({name:x.p.name,value:[x.scale,x.yield,x.scale,x.p.code],itemStyle:{opacity:.95,borderColor:x.p.status.code==='closed'?STATUS_META.closed.color:'transparent',borderWidth:x.p.status.code==='closed'?2:0}}))}]
+    series:[{name:'货币型',type:'scatter',symbolSize:9,color:scatterColor('货币型'),data:rows.map(x=>({name:x.p.name,value:[x.scale,x.yield,x.scale,x.p.code],itemStyle:{opacity:.58,borderColor:x.p.status.code==='closed'?STATUS_META.closed.color:scatterColor('货币型'),borderWidth:x.p.status.code==='closed'?2:.8},emphasis:{scale:1.5,itemStyle:{opacity:1,borderWidth:2}}}))}]
   },true);
   moneyChart.off('click');moneyChart.on('click',pt=>{if(pt.value?.[3])openDrawer(pt.value[3]);});
   if(moneyChart.resize)moneyChart.resize();
@@ -1917,20 +1854,20 @@ function treeDistribution(list){
   nodes.forEach(node=>{node.share=total>0?node.value/total*100:null;});
   return {nodes,countMode,depth,total};
 }
-function selectTreeNode(node){
-  STATE.l1=node.l1Key||'ALL';STATE.l2=node.l2Key||'ALL';STATE.l3=node.l3Key||'ALL';
-  document.querySelectorAll('#chipBar .chip').forEach(c=>c.classList.toggle('active',c.dataset.l1===STATE.l1));
-  renderSubChips();renderAll();
-}
+function selectTreeNode(node){browseTypes([node.l1Key,node.l2Key,node.l3Key].filter(Boolean).join('|'));}
 function renderTree(){
-  const {nodes,countMode,depth}=treeDistribution(filteredProducts()),T=ct();
+  const available=filteredProducts({ignoreTypes:true}).filter(p=>(STATE.l1==='ALL'||p.l1===STATE.l1)&&(STATE.l2==='ALL'||p.l2===STATE.l2)&&(STATE.l3==='ALL'||p.l3===STATE.l3));
+  const selected=treeDistribution(available.filter(typePasses)),{countMode,depth}=selected,T=ct();
+  const selectedByName=new Map(selected.nodes.map(node=>[node.name,node]));
+  const nodes=treeDistribution(available).nodes.map(node=>({...node,scale:0,count:0,value:0,share:null,...selectedByName.get(node.name)}));
+  nodes.sort((a,b)=>b.value-a.value||a.name.localeCompare(b.name,'zh-CN'));
   document.getElementById('treeTitle').textContent='投资类型 · '+(countMode?'数量':'规模')+'分布';
-  document.getElementById('treeHint').textContent=(countMode?'块大小代表基金家族数量':'块大小代表已披露规模')+(STATE.l3==='ALL'?' · 点击查看下一级':'');
+  document.getElementById('treeHint').textContent=(countMode?'块大小代表基金家族数量':'块大小代表已披露规模')+' · 展示当前层级内的已选类型';
   document.getElementById('treeLevelLabel').textContent=['','一级大类','二级策略','三级细分'][depth];
   document.getElementById('treeValueLabel').textContent='规模（亿元）';
   const shareLabel=document.getElementById('treeValueLabel').nextElementSibling;
   shareLabel.textContent=countMode?'数量占比':'规模占比';
-  document.getElementById('treeNote').textContent=countMode?'规模数据覆盖不足，面积与占比按基金家族数量计算。':'按已披露家族规模计算占比，A/C 等份额合并统计。';
+  document.getElementById('treeNote').textContent=countMode?'规模数据覆盖不足，面积与占比按基金家族数量计算。':'勾选联动统计、矩阵与明细 · A/C 等份额合并统计。';
   const path=[{name:'全部类型',l1Key:null,l2Key:null,l3Key:null}];
   if(STATE.l1!=='ALL')path.push({name:STATE.l1,l1Key:STATE.l1});
   if(STATE.l2!=='ALL')path.push({name:STATE.l2,l1Key:STATE.l1,l2Key:STATE.l2});
@@ -1940,17 +1877,21 @@ function renderTree(){
     '<span aria-current="page">'+escapeHtml(node.name)+'</span>':'<button type="button" data-path="'+index+'">'+escapeHtml(node.name)+'</button>')).join('');
   pathEl.onclick=event=>{const button=event.target.closest('button[data-path]');if(button)selectTreeNode(path[Number(button.dataset.path)]);};
   const listEl=document.getElementById('treeList');
-  listEl.innerHTML=nodes.length?nodes.map((node,index)=>'<button type="button" class="tree-row" data-node="'+index+'"'+(STATE.l3!=='ALL'?' disabled':'')+' title="'+escapeHtml(node.name)+' · '+node.count+' 只基金家族">'+
-    '<span class="tree-row-name"><i class="tree-swatch" style="--tree-color:'+node.color+'" aria-hidden="true"></i><span>'+escapeHtml(node.name)+'</span></span>'+
-    '<span class="tree-row-value">'+(node.scale>0?fmt.scale(node.scale):'/')+'</span><span class="tree-row-share">'+(node.share!=null&&(countMode||node.scale>0)?fmt.num(node.share,node.share>0&&node.share<.1?2:1)+'%':'/')+'</span></button>').join(''):
-    '<div class="tree-empty">暂无符合条件的产品</div>';
+  listEl.innerHTML=nodes.length?nodes.map((node,index)=>{
+    const key=[node.l1Key,node.l2Key,node.l3Key].filter(Boolean).join('|');
+    return '<div class="tree-row"><span class="tree-row-name"><input type="checkbox" data-type="'+escapeHtml(key)+'" aria-label="选择'+escapeHtml(node.name)+'">'+
+      '<i class="tree-swatch" style="--tree-color:'+node.color+'" aria-hidden="true"></i><button type="button" data-node="'+index+'"'+(STATE.l3!=='ALL'?' disabled':'')+'>'+escapeHtml(node.name)+'</button></span>'+
+      '<span class="tree-row-value">'+(node.count?(node.scale>0?fmt.scale(node.scale):'/'):'—')+'</span><span class="tree-row-share">'+(node.share!=null&&(countMode||node.scale>0)?fmt.num(node.share,node.share>0&&node.share<.1?2:1)+'%':'—')+'</span></div>';
+  }).join(''):'<div class="tree-empty">暂无符合条件的产品</div>';
   listEl.onclick=event=>{const button=event.target.closest('button[data-node]');if(button&&!button.disabled)selectTreeNode(nodes[Number(button.dataset.node)]);};
+  listEl.onchange=event=>{const input=event.target.closest('input[data-type]');if(input){toggleTypeSelection(input.dataset.type,input.checked);renderSubChips();renderAll();}};
+  syncTypeControls();
   const visible=nodes.filter(node=>node.value>0).map(node=>({...node,itemStyle:{color:node.color}}));
   treeChart.setOption({backgroundColor:'transparent',
-    graphic:visible.length?[]:[emptyChartGraphic('暂无可展示数据')],
+    graphic:visible.length?[]:[emptyChartGraphic('勾选类型后查看分布')],
     tooltip:{backgroundColor:T.tipBg,borderColor:T.tipBorder,textStyle:{color:T.tipText},extraCssText:TIP_GLASS,confine:true,
       formatter:info=>{
-        const node=info.data;if(!node)return '';
+        const node=info.data;if(!node?.l1Key)return '';
         return '<b>'+escapeHtml([node.l1Key,node.l2Key,node.l3Key].filter(Boolean).join(' · '))+'</b>'+
           '<div>已披露规模 '+(node.scale>0?fmt.scale(node.scale)+' 亿元':'/')+'</div><div>基金家族 '+node.count.toLocaleString('zh-CN')+' 只</div>'+
           '<div>'+(countMode?'数量':'规模')+'占比 '+fmt.num(node.share,node.share>0&&node.share<.1?2:1)+'%</div>';
@@ -1960,7 +1901,7 @@ function renderTree(){
       itemStyle:{borderColor:T.treeBorder,borderWidth:2,gapWidth:5,borderRadius:8},
       upperLabel:{show:false},
       label:{show:true,color:'#303039',fontSize:13,fontWeight:600,align:'center',verticalAlign:'middle',lineHeight:21,
-        formatter:info=>info.data?info.data.name.replace(/(.{6})(?=.)/g,'$1\n')+'\n'+fmt.num(info.data.share,1)+'%':''},
+        formatter:info=>info.data?.name?info.data.name.replace(/(.{6})(?=.)/g,'$1\n')+'\n'+fmt.num(info.data.share,1)+'%':''},
       labelLayout:params=>({fontSize:params.rect.width<92||params.rect.height<68?0:13}),
       emphasis:{itemStyle:{borderColor:T.treeBorder,shadowBlur:8,shadowColor:'rgba(0,0,0,.10)'},label:{color:'#202028'}}}]
   },true);
@@ -2078,14 +2019,14 @@ function bindTableEvents(){
 
 // ---------- 工具栏：搜索 / 自选 / 清除筛选 / 导出 CSV ----------
 function anyFilterActive(){
-  return STATE.l1!=='ALL' || STATE.l2!=='ALL' || STATE.l3!=='ALL' || !!(STATE.search||'').trim() || STATE.favOnly || STATE.showAllShares;
+  return STATE.typeSelection!==null || !!(STATE.search||'').trim() || STATE.favOnly || STATE.showAllShares;
 }
 function updateClearBtn(){
   const btn = document.getElementById('clearFilters'); if(!btn) return;
   btn.style.display = anyFilterActive() ? '' : 'none';
 }
 function clearAllFilters(){
-  STATE.l1='ALL'; STATE.l2='ALL'; STATE.l3='ALL'; STATE.search=''; STATE.favOnly=false; STATE.showAllShares=false; STATE.sortKey='scale'; STATE.sortAsc=false;
+  STATE.typeSelection=null; STATE.l1='ALL'; STATE.l2='ALL'; STATE.l3='ALL'; STATE.search=''; STATE.favOnly=false; STATE.showAllShares=false; STATE.sortKey='scale'; STATE.sortAsc=false;
   const sb=document.getElementById('searchBox'); if(sb) sb.value='';
   const ft=document.getElementById('favToggle'); if(ft){ ft.classList.remove('active'); ft.textContent='☆ 自选'; }
   const tShr=document.getElementById('toggleShares'); if(tShr) tShr.checked=false;
@@ -2397,7 +2338,7 @@ function refreshChipCounts(){
 function renderAll(){
   const list = filteredProducts();
   reconcileSelectedProduct(list);
-  refreshChipCounts(); renderKpi(); renderBubble(); renderTree(); renderTable(); updatePoolStat(); updateHealthBadge(); updateClearBtn();
+  refreshChipCounts(); renderKpi(); renderBubble(); renderTree(); renderTable(); syncTypeControls(); updatePoolStat(); updateHealthBadge(); updateClearBtn();
 }
 
 // ---------- 数据健康面板 ----------

@@ -9,11 +9,12 @@ const store=new Map();
 const context={console,Map,Set,Promise,Date,Math,Number,String,Object,Array,JSON,RegExp,
   setTimeout,clearTimeout,URL,assert,navigator:{onLine:false},
   localStorage:{getItem:k=>store.get(k)||null,setItem:(k,v)=>store.set(k,v)},
-  document:{documentElement:{dataset:{theme:'dark'}},},addEventListener:()=>{},__tryBoot:()=>{}};
+  document:{documentElement:{dataset:{theme:'dark'}},querySelectorAll:()=>[],querySelector:()=>null},addEventListener:()=>{},__tryBoot:()=>{}};
 context.window=context;
 vm.createContext(context);vm.runInContext(main,context);
 vm.runInContext(fs.readFileSync(path.join(root,'dist/market.js'),'utf8'),context);
 vm.runInContext(`
+assert.equal(STATE.typeSelection.size,2,'default shared selection is pure bonds');STATE.typeSelection=null;
 setProductsFromPool([
   {code:'000001',name:'测试成长混合A',type:'混合型-偏股',companyId:'firm1'},
   {code:'000002',name:'测试成长混合C',type:'混合型-偏股',companyId:'firm1'},
@@ -166,14 +167,14 @@ assert.equal(distribution.nodes.reduce((n,x)=>n+x.count,0),3,'share variants rem
 assert(distribution.nodes.every(x=>!x.children),'only the current hierarchy level is rendered');
 assert(Math.abs(distribution.nodes.reduce((n,x)=>n+x.share,0)-100)<1e-9);
 assert.equal(new Set(Object.keys(TREE_CATEGORY_INDEX).map(key=>treeNodeColor(key))).size,9,'top-level fund types have distinct pastel colors');
-STATE.l1='债券型';distribution=treeDistribution(filteredProducts());
+STATE.l1='债券型';distribution=treeDistribution(filteredProducts().filter(p=>p.l1===STATE.l1));
 assert.equal(distribution.depth,2);assert.equal(distribution.nodes[0].name,'纯债');assert.equal(distribution.total,50);
-STATE.l2='纯债';distribution=treeDistribution(filteredProducts());
+STATE.l2='纯债';distribution=treeDistribution(filteredProducts().filter(p=>p.l1===STATE.l1&&p.l2===STATE.l2));
 assert.equal(distribution.depth,3);assert.equal(distribution.nodes.length,2);
 assert.equal(distribution.nodes.find(x=>x.name==='中短债').value,0,'missing scale is listed without fabricated treemap area');
-DS.perfMap={};distribution=treeDistribution(filteredProducts());
+DS.perfMap={};distribution=treeDistribution(filteredProducts().filter(p=>p.l1===STATE.l1));
 assert.equal(distribution.countMode,true);assert.equal(distribution.total,2);assert(distribution.nodes.every(x=>x.share===50));
-STATE.l3='长期纯债';distribution=treeDistribution(filteredProducts());assert.equal(distribution.nodes.length,1);
+STATE.l3='长期纯债';distribution=treeDistribution(filteredProducts().filter(p=>p.l1===STATE.l1&&p.l3===STATE.l3));assert.equal(distribution.nodes.length,1);
 STATE.search='不存在的分类测试';distribution=treeDistribution(filteredProducts());assert.equal(distribution.nodes.length,0);assert.equal(distribution.total,0);
 STATE.search='';Object.assign(STATE,distributionState);setProductsFromPool(distributionProducts);DS.perfMap=distributionPerf;
 const elements=new Map();document.getElementById=id=>{if(!elements.has(id))elements.set(id,{});return elements.get(id);};
@@ -186,15 +187,14 @@ assert.equal(checkSnapshotCompleteness(),false);assert(MARKET.snapshotIssue.incl
 MARKET.failures=[];assert.equal(healthFailures().length,1,'refreshing request failures does not erase a missing snapshot chunk alert');
 SNAP.perf['000002']={};assert.equal(checkSnapshotCompleteness(),true);assert.equal(healthFailures().length,0);
 const oldGet=document.getElementById,oldCreate=document.createElement,oldSub=renderSubChips,oldRender=renderAll;
-const chipBar={children:[],onclick:null,appendChild(el){this.children.push(el);},querySelectorAll(selector){return this.children.filter(el=>selector.includes(':not(')?el.dataset.l1!=='ALL':true);}};
-const makeChip=()=>{const active=new Set();return {dataset:{},className:'',innerHTML:'',classList:{toggle(name,on){if(on)active.add(name);else active.delete(name);},contains(name){return active.has(name);}},remove(){chipBar.children=chipBar.children.filter(el=>el!==this);}};};
+const chipBar={children:[],onclick:null,appendChild(el){this.children.push(el);},querySelectorAll(selector){return this.children.filter(el=>selector==='.type-choice'?el.className==='type-choice':true);}};
+const makeChip=()=>({dataset:{},className:'',innerHTML:'',remove(){chipBar.children=chipBar.children.filter(el=>el!==this);}});
 const allChip=makeChip();allChip.dataset.l1='ALL';chipBar.children.push(allChip);
 document.createElement=makeChip;document.getElementById=id=>id==='chipBar'?chipBar:oldGet(id);
+let clicks=0;renderSubChips=()=>{};renderAll=()=>{clicks++;};
 STATE.l1='混合型';STATE.search='';renderChips();renderChips();renderChips();
-assert.equal(chipBar.children.length,new Set(PRODUCTS.filter(sharePasses).map(p=>p.l1)).size+1,'repeated directory rendering must not duplicate category chips');
-assert.equal(new Set(chipBar.children.map(el=>el.dataset.l1)).size,chipBar.children.length);
-assert.equal(chipBar.children.filter(el=>el.classList.contains('active')).length,1,'selected category stays active after redraw');
-let clicks=0;renderSubChips=()=>{};renderAll=()=>{clicks++;};chipBar.onclick({target:{closest:()=>allChip}});assert.equal(clicks,1);
+assert.equal(chipBar.children.length,new Set(PRODUCTS.filter(sharePasses).map(p=>p.l1)).size+1,'repeated rendering must not duplicate category controls');
+chipBar.onclick({target:{closest:selector=>selector.includes('data-l1')?allChip:null}});assert.equal(clicks,1);assert.equal(STATE.typeSelection,null);
 document.getElementById=oldGet;document.createElement=oldCreate;renderSubChips=oldSub;renderAll=oldRender;
 const searchProducts=PRODUCTS.map(p=>({...p})),searchPerf=DS.perfMap;
 setProductsFromPool([
@@ -217,8 +217,8 @@ for(const query of ['华安','华安基金',' 华安基金管理有限公司 ','
   assert(elements.get('kpiCompaniesSub').textContent.includes('华安基金'));
 }
 STATE.showAllShares=true;assert.equal(filteredProducts().length,3,'share-class toggle remains effective under company search');
-STATE.showAllShares=false;STATE.l1='债券型';assert.equal(filteredProducts().length,0,'investment-type filters remain effective');
-STATE.l1='ALL';STATE.search='安享';assert.equal(filteredProducts()[0].code,'000103','ordinary product keywords retain substring matching');
+STATE.showAllShares=false;STATE.typeSelection=new Set(typeLeaves('债券型'));assert.equal(filteredProducts().length,0,'investment-type filters remain effective');
+STATE.typeSelection=null;STATE.l1='ALL';STATE.search='安享';assert.equal(filteredProducts()[0].code,'000103','ordinary product keywords retain substring matching');
 STATE.search='张华安';assert.equal(filteredProducts()[0].code,'000107','manager searches remain available');
 STATE.search='000108';assert.equal(filteredProducts()[0].code,'000108','an unmapped company never hides its fund from code search');
 STATE.search='未核验';assert.equal(filteredProducts()[0].code,'000108');
@@ -232,9 +232,11 @@ setProductsFromPool([
   {code:'000203',name:'测试主动股票A',type:'股票型',purchaseStatus:'开放申购'}
 ]);
 DS.perfMap={'000201':{scale:10,y1:.35,mdd:-.1},'000202':{scale:20,y1:.4,mdd:-.03},'000203':{scale:30,y1:150,mdd:-80}};
-STATE.search='';STATE.l1='ALL';STATE.bubbleTypes=new Set(['债券型|纯债']);
+STATE.search='';STATE.l1='ALL';STATE.typeSelection=new Set(typeLeaves('债券型|纯债'));
+renderKpi();assert.equal(elements.get('selectionCount').textContent,'2');assert.equal(elements.get('selectionScale').textContent,'30');
 assert.equal(bubbleProducts().map(p=>p.code).join(','),'000201,000202','scatter defaults to pure bonds');
-STATE.l1='股票型';assert.equal(filteredProducts().length,1);assert.equal(bubbleProducts().length,2,'scatter selections operate independently of table type filters');STATE.l1='ALL';
+assert.equal(filteredProducts().length,2,'table and scatter share the pure-bond selection');
+const pureSignature=signature();toggleTypeSelection('股票型',true);assert.notEqual(signature(),pureSignature);assert.equal(STATE.l1,'ALL');renderKpi();assert.equal(elements.get('selectionCount').textContent,'3');assert.equal(elements.get('selectionScale').textContent,'60');assert.equal(filteredProducts().length,3);assert.equal(bubbleProducts().length,3,'multi-select union drives both table and scatter');toggleTypeSelection('股票型',false);
 let capturedBubble;
 document.getElementById=id=>id==='matrixTypeOptions'?null:chartGet(id);
 bubbleChart={setOption(option){capturedBubble=option;},off(){},on(){}};
@@ -245,7 +247,9 @@ assert.equal(purchaseMeta('暂停赎回').code,'unknown','redemption text does n
 assert.equal(purchaseMeta('停止申购').code,'closed');
 assert.equal(statusInfo({status:{code:'unknown'}}),null);
 assert.equal(statusInfo({status:{code:'limited'}}),null);
-assert.equal(capturedBubble.series[0].data[0].itemStyle.borderWidth,0,'limited and unverified subscriptions have no scatter border');
+assert.equal(capturedBubble.series[0].data[0].itemStyle.borderWidth,.8,'ordinary circles have thin type-colored borders');
+assert(capturedBubble.series.every(series=>series.data.every(point=>point.symbolSize<=22&&point.itemStyle.opacity<.7)));
+assert.equal(capturedBubble.dataZoom.length,4,'both axes support slider and inside zoom');
 PRODUCTS[0].status=purchaseMeta('暂停申购');referenceRenderBubble();
 const stoppedPoint=capturedBubble.series[0].data.find(point=>point.value[3]==='000201');
 assert.equal(stoppedPoint.itemStyle.borderColor,'#FFD43B');assert.equal(stoppedPoint.itemStyle.borderWidth,2);
@@ -255,18 +259,18 @@ assert.equal(capturedBubble.xAxis.type,'value');assert.equal(capturedBubble.yAxi
 assert(capturedBubble.xAxis.min<-.1&&capturedBubble.xAxis.max>-.03);
 assert(capturedBubble.yAxis.min>0&&capturedBubble.yAxis.max<1,'narrow return distributions get narrow linear axes');
 assert.notEqual(capturedBubble.xAxis.axisLabel.formatter(-.1),capturedBubble.xAxis.axisLabel.formatter(-.03),'narrow axes keep distinguishable decimal labels');
-STATE.bubbleTypes.add('股票型|主动股票');referenceRenderBubble();
+toggleTypeSelection('股票型|主动股票',true);referenceRenderBubble();
 assert.equal(capturedBubble.series.reduce((n,s)=>n+s.data.length,0),3,'checkbox selections form a union');
 assert(capturedBubble.xAxis.min<-80&&capturedBubble.yAxis.max>150,'axis bounds include every point and outlier');
-STATE.bubbleTypes.delete('债券型|纯债');assert.equal(bubbleProducts()[0].code,'000203');
-STATE.bubbleTypes.clear();referenceRenderBubble();assert.equal(capturedBubble.series.length,0);assert(capturedBubble.graphic[0].style.text.includes('勾选'));
-DS.perfMap['000201']={scale:10,y1:0,mdd:0};STATE.bubbleTypes.add('债券型|纯债');referenceRenderBubble();
+toggleTypeSelection('债券型|纯债',false);assert.equal(bubbleProducts()[0].code,'000203');
+STATE.typeSelection=new Set();referenceRenderBubble();assert.equal(capturedBubble.series.length,0);assert(capturedBubble.graphic[0].style.text.includes('勾选'));
+DS.perfMap['000201']={scale:10,y1:0,mdd:0};toggleTypeSelection('债券型|纯债',true);referenceRenderBubble();
 assert(capturedBubble.xAxis.min<0&&capturedBubble.xAxis.max>0);assert(capturedBubble.yAxis.min<0&&capturedBubble.yAxis.max>0);
 setProductsFromPool([{code:'000204',name:'测试货币A',type:'货币型-普通货币'},{code:'000205',name:'缺失七日年化货币A',type:'货币型-普通货币'},{code:'000206',name:'零收益货币A',type:'货币型-普通货币'}]);
 DS.perfMap={'000204':{scale:50,qrnh:1.25,wfsy:.3,y1:1.1,mdd:null,jzrq:'2026-11-16'},'000205':{scale:20,qrnh:null},'000206':{scale:5,qrnh:0,wfsy:0,y1:0}};
-STATE.bubbleTypes=new Set(['货币型|货币型']);
+STATE.typeSelection=new Set();
 // Use the normalized hierarchy keys from the actual pool rather than guessing a type label.
-STATE.bubbleTypes=new Set(PRODUCTS.map(p=>p.l1+'|'+p.l2));
+STATE.typeSelection=new Set(PRODUCTS.map(typeKey));
 assert.equal(bubbleProducts().length,3,'money funds are offered by the scatter selector');
 assert.equal(moneyBubbleRows(bubbleProducts()).length,2,'missing yield is excluded, actual zero is retained');
 let capturedMoney;moneyChart={setOption(option){capturedMoney=option;},off(){},on(){},resize(){}};
@@ -277,12 +281,19 @@ const moneyTip=capturedMoney.tooltip.formatter(capturedMoney.series[0].data[0]);
 assert(moneyTip.includes('1.250%')&&moneyTip.includes('0.3000 元')&&moneyTip.includes('1.10%'));
 assert(!moneyTip.includes('最大回撤'),'money is never assigned a fabricated zero-risk value');
 moneyChart=null;
-setProductsFromPool(chartProducts);DS.perfMap=chartPerf;document.getElementById=chartGet;STATE.bubbleTypes=new Set(['债券型|纯债']);bubbleChart=null;
+setProductsFromPool(chartProducts);DS.perfMap=chartPerf;document.getElementById=chartGet;STATE.typeSelection=null;bubbleChart=null;
+const emptySelection=STATE.typeSelection;STATE.typeSelection=new Set();STATE.l1='ALL';STATE.l2='ALL';STATE.l3='ALL';
+elements.get('treeValueLabel')||document.getElementById('treeValueLabel');elements.get('treeValueLabel').nextElementSibling={};
+let capturedTree;treeChart={setOption(option){capturedTree=option;},off(){},on(){}};renderTree();
+assert.equal(capturedTree.series[0].data.length,0);assert.equal(capturedTree.series[0].label.formatter({data:{}}),'','empty treemap root has no label');
+assert.equal(capturedTree.tooltip.formatter({data:{}}),'');
+STATE.typeSelection=emptySelection;treeChart=null;
 
 `,context);
 assert(!html.includes('COMPANY_AUM ='));
 assert(!html.includes('setInterval('),'no automatic refresh interval');
 assert(!html.includes("content:'FG'"));
+assert(!html.includes('id="matrixTypeOptions"'));assert(!html.includes('bubbleTypes'));
 assert(!html.includes('id="tableHint"'));assert(!html.includes('id="dsStack"'));
 const tableHeader=html.match(/<table class="ptable"[\s\S]*?<thead>([\s\S]*?)<\/thead>/)[1];
 const headerCells=[...tableHeader.matchAll(/<th\b[\s\S]*?<\/th>/g)].map(m=>m[0]);

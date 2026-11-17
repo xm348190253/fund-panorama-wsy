@@ -460,7 +460,7 @@ loadAllPerformance=async function(codes){
   let success=0,fail=0;for(const code of codes){if(await loadPerformance(code))success++;else fail++;}
   return {success,fail};
 };
-function signature(){return [STATE.l1,STATE.l2,STATE.l3,STATE.search,STATE.favOnly,STATE.showAllShares,STATE.sortKey,STATE.sortAsc].join('|');}
+function signature(){return [STATE.typeSelection===null?'ALL':[...STATE.typeSelection].sort().join(','),STATE.search,STATE.favOnly,STATE.showAllShares,STATE.sortKey,STATE.sortAsc].join('|');}
 function currentPageProducts(){
   const key=signature();if(key!==MARKET.signature){MARKET.signature=key;MARKET.page=1;}
   const all=sortedProducts(filteredProducts()),pages=Math.max(1,Math.ceil(all.length/MARKET.size));
@@ -498,6 +498,10 @@ renderKpi=function(){
     const url=/^https:\/\//.test(marketTotal.sourceUrl||'')?marketTotal.sourceUrl:null;
     totalSub.innerHTML=total!=null?'截至 '+htmlText(marketTotal.asOf)+' · '+(url&&!snapshotMode()?'<a href="'+escapeHtml(url)+'" target="_blank" rel="noopener noreferrer" style="color:inherit;text-decoration:underline">'+htmlText(source)+'</a>':htmlText(source))+'<br>全市场公募基金净资产 · 不随筛选变化':'等待核验最新官方月报';
   }
+  const sources=new Set(),scales=families.map(p=>familyScale(p,sources)).filter(value=>value!=null);
+  text('selectionScale',scales.length?scales.reduce((sum,value)=>sum+value,0).toLocaleString('zh-CN',{maximumFractionDigits:2}):'/');
+  text('selectionCount',list.length.toLocaleString('zh-CN'));
+  text('selectionCountUnit',STATE.showAllShares?'个份额代码':'只');
   text('kpiCount',list.length.toLocaleString('zh-CN'));
   text('kpiCountSub',(STATE.showAllShares?'按份额代码计数':'按基金家族去重')+' · 当前筛选结果');
   text('kpiSharpe',returns.length?fmt.signed(returns.reduce((a,b)=>a+b,0)/returns.length,2)+'%':'--');
