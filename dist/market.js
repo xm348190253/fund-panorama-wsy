@@ -518,16 +518,6 @@ renderBubble=function(){referenceRenderBubble();
     return original(params)+'<div style="font-size:10px;opacity:.75;margin-top:6px">回撤区间 '+htmlText(pf.historyStart)+' ～ '+htmlText(pf.mddAsOf)+'</div>';
   }}});
 };
-const referenceRenderTree=renderTree;
-renderTree=function(){
-  referenceRenderTree();
-  const unique=new Map(filteredProducts().map(p=>[familyKey(p),p]));
-  const covered=[...unique.values()].filter(p=>(familyScale(p)||0)>0).length;
-  const countMode=unique.size>0&&covered/unique.size<.4;
-  const panel=document.getElementById('chartTree').closest('.panel');
-  panel.querySelector('.panel-title').textContent=countMode?'投资类型 · 三级数量分布':'投资类型 · 三级规模分布';
-  panel.querySelector('.panel-hint').textContent=countMode?'块大小 = 基金家族数量 · 规模覆盖 '+covered+' / '+unique.size+'，当前按数量展示 · 点击下钻筛选':'块大小 = 已披露家族规模(亿) · 顶栏显示只数 · 点击下钻筛选';
-};
 findInternalAlternatives=function(p,max=3){
   const theme=detectTheme(p);
   return PRODUCTS.filter(q=>q.isPrimary&&familyKey(q)!==familyKey(p)&&q.l1===p.l1&&q.l2===p.l2)

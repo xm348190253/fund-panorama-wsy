@@ -150,6 +150,30 @@ body{background-image:var(--page-grad);min-height:100vh;padding-bottom:60px;tran
 .panel-title::before{content:'';display:inline-block;width:3px;height:13px;background:var(--accent);border-radius:2px;vertical-align:-1px;margin-right:8px}
 .panel-hint{font-size:11px;color:var(--text-3);line-height:1.5;text-align:right;max-width:70%}
 .chart-box{width:100%;height:520px}
+.panel-tree{container-type:inline-size;min-width:0}
+.tree-path{display:flex;align-items:center;flex-wrap:wrap;gap:6px;padding:8px 18px 14px;color:var(--text-3);font-size:12px}
+.tree-path button{border:0;background:none;padding:4px 6px;color:var(--accent);font:inherit;cursor:pointer;border-radius:5px}
+.tree-path button:hover{background:var(--accent-soft)}
+.tree-path button:focus-visible,.tree-row:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.tree-path [aria-current]{color:var(--text-1);font-weight:700;padding:4px 6px;overflow-wrap:anywhere}
+.tree-layout{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(240px,1fr);gap:18px;padding:0 18px 18px;align-items:start}
+.tree-layout #chartTree{height:460px;min-width:0}
+.tree-details{min-width:0}
+.tree-list-head,.tree-row{display:grid;grid-template-columns:minmax(0,1fr) 78px 50px;align-items:center;gap:8px}
+.tree-list-head{padding:10px 6px;color:var(--text-3);font-size:11px;border-bottom:1px solid var(--border)}
+.tree-list-head span:not(:first-child){text-align:right}
+.tree-list{display:grid;gap:2px;padding-top:4px}
+.tree-row{width:100%;padding:11px 6px;border:0;border-radius:7px;background:transparent;color:var(--text-1);font:inherit;font-size:12px;text-align:left;cursor:pointer;line-height:1.6}
+.tree-row:hover{background:var(--row-hover)}
+.tree-row:disabled{cursor:default}
+.tree-row-name{display:flex;align-items:flex-start;gap:7px;font-weight:700;min-width:0;overflow-wrap:anywhere}
+.tree-swatch{width:11px;height:11px;border-radius:3px;flex-shrink:0;margin-top:4px;background:var(--tree-color)}
+.tree-row-value,.tree-row-share{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.tree-row-share{color:var(--text-2)}
+.tree-note{padding:10px 8px 0;color:var(--text-3);font-size:11px;line-height:1.7;text-align:center}
+.tree-empty{color:var(--text-3);font-size:12px;text-align:center;padding:32px 8px}
+@container(max-width:500px){.tree-layout{grid-template-columns:minmax(0,1fr)}.tree-layout #chartTree{height:300px}.tree-list-head,.tree-row{grid-template-columns:minmax(0,1fr) 110px 70px}}
+@container(max-width:360px){.tree-layout{padding:0 12px 14px;gap:10px}.tree-list-head,.tree-row{grid-template-columns:minmax(0,1fr) 82px 52px;gap:7px}.tree-row{font-size:11px}.tree-layout #chartTree{height:260px}}
 
 /* Table */
 .panel-table{margin:14px 28px 0;background:var(--glass-bg);backdrop-filter:blur(var(--blur)) saturate(170%);-webkit-backdrop-filter:blur(var(--blur)) saturate(170%);border:1px solid var(--glass-border);border-radius:var(--r-lg);overflow:hidden;box-shadow:0 1px 0 var(--glass-hi) inset,var(--shadow-1)}
@@ -545,10 +569,18 @@ button:focus-visible,input:focus-visible,a:focus-visible,select:focus-visible{ou
   </div>
   <div class="panel panel-tree">
     <div class="panel-header">
-      <div class="panel-title">投资类型 · 三级规模分布</div>
-      <div class="panel-hint">块大小 = 已披露家族规模(亿) · 顶栏显示只数 · 点击下钻筛选</div>
+      <div class="panel-title" id="treeTitle">投资类型 · 规模分布</div>
+      <div class="panel-hint" id="treeHint">块大小代表已披露规模 · 点击查看下一级</div>
     </div>
-    <div id="chartTree" class="chart-box"></div>
+    <nav id="treePath" class="tree-path" aria-label="投资类型层级"></nav>
+    <div class="tree-layout">
+      <div id="chartTree" class="chart-box" role="img" aria-label="当前层级基金规模矩形树图，完整数据见分类清单"></div>
+      <div class="tree-details">
+        <div class="tree-list-head"><span id="treeLevelLabel">一级大类</span><span id="treeValueLabel">规模（亿元）</span><span>占比</span></div>
+        <div id="treeList" class="tree-list" aria-label="分类完整名称与数据"></div>
+        <div id="treeNote" class="tree-note"></div>
+      </div>
+    </div>
   </div>
 </section>
 
@@ -1851,166 +1883,88 @@ function chartFillText(color){
   const luminance=rgb[0]*.2126+rgb[1]*.7152+rgb[2]*.0722;
   return (luminance+.05)/.06444>1.05/(luminance+.05)?'#202020':'#FFFFFF';
 }
-function renderTree(){
-  // L1 → L2 → L3 三级 treemap。
-  // 关键修正：
-  //   ① 不再用 value=1 占位（早期不准确版本会让没规模的产品虚占面积）
-  //   ② 同家族（A+C+E...）规模只算一次，避免重复累加
-  //   ③ 若该筛选下规模覆盖率 < 40% → 自动改用"产品数量"为面积，避免大面积空白
-  //   ④ 兜底 fallback name，杜绝 tooltip "undefined"
-  const list = filteredProducts();
-
-  // 用家族（去重）作为聚合单元：同一家族取代表（家族规模在主份额或任一已加载份额上）
-  const seenFamily = new Set(), seenScaleSources = new Set();
-  const familyUnits = [];
+const TREE_PASTELS = ['#F1B7C5','#F6CBAA','#F8E7A5','#C8DCF7','#D8C7EF','#BFE1D4','#BBDDEB','#D6E1AE','#D9DDE4'];
+const TREE_CATEGORY_INDEX = {'股票型':0,'混合型':1,'货币型':2,'债券型':3,'QDII':4,'FOF':5,'REITs':6,'商品型':7,'其他':8};
+function treeNodeColor(l1,l2,l3){
+  const base=TREE_CATEGORY_INDEX[l1]??8;
+  const group=L1_BY_KEY[l1];
+  if(!l2||!group)return TREE_PASTELS[base];
+  const keys=l3?group.l2.find(x=>x.key===l2)?.l3:group.l2.map(x=>x.key);
+  const index=Math.max(0,(keys||[]).indexOf(l3||l2));
+  return TREE_PASTELS[(base+index*4)%TREE_PASTELS.length];
+}
+function treeDistribution(list){
+  // A family contributes once. Redirected scale sources are also deduplicated.
+  const seenFamilies=new Set(),seenSources=new Set(),units=[];
   list.forEach(p=>{
-    const fk = FAMILY_BY_CODE.get(p.code) || p.code;
-    if(seenFamily.has(fk)) return;
-    seenFamily.add(fk);
-    const fs = familyScale(p,seenScaleSources) || 0;
-    familyUnits.push({ p, scale: fs });
+    const key=FAMILY_BY_CODE.get(p.code)||p.code;
+    if(seenFamilies.has(key))return;
+    seenFamilies.add(key);
+    units.push({p,scale:familyScale(p,seenSources)||0});
   });
-  const withScale = familyUnits.filter(u=>u.scale>0).length;
-  const useCountMode = familyUnits.length>0 && (withScale/familyUnits.length) < 0.4;
-
-  const grouped = INVEST_HIERARCHY.map(h=>{
-    const l1Items = familyUnits.filter(u=>u.p.l1===h.l1);
-    if(!l1Items.length) return null;
-    // 按 l2 分组
-    const l2Map = {};
-    l1Items.forEach(x=>{
-      const k = x.p.l2 || '其他';
-      if(!l2Map[k]) l2Map[k] = { name:k, value:0, scale:0, count:0, byL3:{} };
-      // 面积取值：规模模式用 scale（无规模=0 → 在视图里不显示）；数量模式用 1
-      const areaV = useCountMode ? 1 : x.scale;
-      l2Map[k].value += areaV;
-      l2Map[k].scale += x.scale;
-      l2Map[k].count += 1;
-      const l3k = x.p.l3 || '其他';
-      if(!l2Map[k].byL3[l3k]) l2Map[k].byL3[l3k] = { name:l3k, value:0, scale:0, count:0 };
-      l2Map[k].byL3[l3k].value += areaV;
-      l2Map[k].byL3[l3k].scale += x.scale;
-      l2Map[k].byL3[l3k].count += 1;
-    });
-    const l2Children = Object.values(l2Map).sort((a,b)=>b.value-a.value).map(l2node=>{
-      const l3Children = Object.values(l2node.byL3).sort((a,b)=>b.value-a.value).map(l3node=>({
-        name: l3node.name + ' · ' + l3node.count + ' 只',  // ← 直接编码到 name 里，确保小块也能看到
-        rawName: l3node.name,
-        value: l3node.value > 0 ? l3node.value : 0.01,  // 保留极小可见面积，避免完全隐藏
-        scale: l3node.scale,
-        count: l3node.count,
-        l1Key: h.l1, l2Key: l2node.name, l3Key: l3node.name,
-        label:{color:chartFillText(h.color)},
-        itemStyle:{ color:h.color, opacity:1, borderColor:ct().treeBorder, borderWidth:1, borderRadius:4 }
-      }));
-      return {
-        name: l2node.name,
-        value: l2node.value > 0 ? l2node.value : 0.01,
-        scale: l2node.scale,
-        count: l2node.count,
-        l1Key: h.l1, l2Key: l2node.name,
-        itemStyle:{ color:h.color, opacity:0.92 },
-        children: l3Children
-      };
-    });
-    const l1Scale = l1Items.reduce((s,x)=>s+x.scale,0);
-    const l1Value = useCountMode ? l1Items.length : l1Scale;
-    return {
-      name: h.l1,
-      value: l1Value > 0 ? l1Value : 0.01,
-      scale: l1Scale,
-      count: l1Items.length,
-      l1Key: h.l1,
-      itemStyle:{ color:h.color },
-      children: l2Children
-    };
-  }).filter(Boolean);
-
-  const T=ct();
-  const treeLabel=document.documentElement.dataset.theme==='light'?'#22201C':'#fff';
-  treeChart.setOption({
-    backgroundColor:'transparent',
-    graphic: familyUnits.length ? [] : [emptyChartGraphic('未找到符合条件的产品\n请调整筛选或搜索关键词')],
-    tooltip:{ backgroundColor:T.tipBg, borderColor:T.tipBorder, borderWidth:1, extraCssText:TIP_GLASS,
-      textStyle:{color:T.tipText,fontSize:12}, padding:12,
-      formatter: info=>{
-        const d = info && info.data;
-        if(!d) return '';
-        const scaleTxt = d.scale>0 ? (fmt.scale(d.scale)+' 亿') : '<span style="color:'+T.label+'">未披露</span>';
-        const cntTxt = d.count!=null ? (d.count+' 只家族') : '';
-        if (d.l3Key) return '<div style="font-weight:600;margin-bottom:4px;color:'+T.tipText+'">'+d.l1Key+' · '+d.l2Key+' · '+d.l3Key+'</div>'+
-          '<div style="font-size:12px;color:'+T.legend+'">合并规模 <span style="color:'+T.tipText+';font-weight:600">'+scaleTxt+'</span> · '+cntTxt+'</div>'+
-          '<div style="font-size:11px;color:'+T.label+'">点击筛选到该三级细分</div>';
-        if (d.l2Key) return '<div style="font-weight:600;margin-bottom:4px;color:'+T.tipText+'">'+d.l1Key+' · '+d.l2Key+'</div>'+
-          '<div style="font-size:12px;color:'+T.legend+'">合并规模 <span style="color:'+T.tipText+';font-weight:600">'+scaleTxt+'</span> · '+cntTxt+'</div>'+
-          '<div style="font-size:11px;color:'+T.label+'">点击筛选到该二级策略</div>';
-        if (d.l1Key) return '<div style="font-weight:600;margin-bottom:4px;color:'+T.tipText+'">'+d.l1Key+'</div>'+
-          '<div style="font-size:12px;color:'+T.legend+'">合并规模 <span style="color:'+T.tipText+';font-weight:600">'+scaleTxt+'</span> · '+cntTxt+'</div>'+
-          '<div style="font-size:11px;color:'+T.label+'">点击筛选该一级大类</div>';
-        return ''; // 根节点不显示 tooltip，避免 "undefined"
-      } },
-    series:[{ type:'treemap', breadcrumb:{show:false}, roam:false, nodeClick:false, data:grouped,
-      width:'100%', height:'100%', top:4, bottom:4, left:4, right:4,
-      visibleMin: 0,
-      childrenVisibleMin: 0,
-      squareRatio: 0.7, // 让块更接近正方形，避免极扁
-      // 视觉口径：顶栏显示"X 只"（数量），叶子内居中显示"X 亿"（规模）
-      levels:[
-        { itemStyle:{gapWidth:3, borderWidth:0, borderRadius:8} },
-        // L1 一级大类 —— 顶栏窄而清晰
-        { itemStyle:{gapWidth:2, borderColor:T.treeBorder, borderWidth:2, borderRadius:6},
-          upperLabel:{show:true, height:22, color:treeLabel, fontWeight:700, fontSize:12, padding:[0,8,0,10],
-            backgroundColor:T.treeUpper,
-            formatter: p=>{
-              if(!p.data) return p.name||'';
-              return (p.data.l1Key||p.name||'') + '  ·  ' + (p.data.count||0) + ' 只';
-            } },
-          emphasis:{ upperLabel:{color:treeLabel} } },
-        // L2 二级策略 —— 顶栏更紧凑
-        { itemStyle:{gapWidth:1, borderColor:T.treeBorder, borderWidth:1, borderRadius:5},
-          upperLabel:{show:true, height:16, color:treeLabel, fontWeight:500, fontSize:10.5, padding:[0,6,0,8],
-            backgroundColor:T.treeUpper2,
-            formatter: p=>{
-              if(!p.data) return p.name||'';
-              return (p.data.l2Key||p.name||'') + '  ·  ' + (p.data.count||0) + ' 只';
-            } },
-          emphasis:{ upperLabel:{color:treeLabel} } },
-        // L3 三级细分（叶子）—— 纯文本两行，ECharts 才能正确居中
-        { itemStyle:{gapWidth:1, borderWidth:0, borderRadius:4},
-          label:{
-            show:true,
-            color:treeLabel,
-            fontSize:12,
-            fontWeight:500,
-            align:'center',
-            verticalAlign:'middle',
-            lineHeight:18,
-            overflow:'truncate',
-            formatter: p=>{
-              if(!p.data) return p.name||'';
-              const nm = p.data.l3Key || p.data.rawName || p.name || '';
-              const sc = p.data.scale || 0;
-              return sc>0 ? (nm + '\n' + fmt.scale(sc) + ' 亿') : nm;
-            }
-          }
-        }
-      ] }]
-  }, true);
-  treeChart.off('click');
-  treeChart.on('click', params=>{
-    const d = params.data; if(!d) return;
-    if (d.l3Key) {
-      STATE.l1 = d.l1Key; STATE.l2 = d.l2Key; STATE.l3 = d.l3Key;
-    } else if (d.l2Key) {
-      STATE.l1 = d.l1Key; STATE.l2 = d.l2Key; STATE.l3 = 'ALL';
-    } else if (d.l1Key) {
-      if(STATE.l1===d.l1Key) return;
-      STATE.l1 = d.l1Key; STATE.l2 = 'ALL'; STATE.l3 = 'ALL';
-    } else return;
-    document.querySelectorAll('#chipBar .chip').forEach(c=>c.classList.toggle('active', c.dataset.l1===STATE.l1));
-    renderSubChips();
-    renderAll();
+  const countMode=units.length>0&&units.filter(x=>x.scale>0).length/units.length<.4;
+  const depth=STATE.l1==='ALL'?1:STATE.l2==='ALL'?2:3;
+  const groups=new Map();
+  units.forEach(({p,scale})=>{
+    const name=(depth===1?p.l1:depth===2?p.l2:p.l3)||'其他';
+    if(!groups.has(name))groups.set(name,{name,l1Key:p.l1,l2Key:depth>=2?p.l2:null,l3Key:depth===3?p.l3:null,scale:0,count:0});
+    const node=groups.get(name);
+    node.scale+=scale;node.count++;
   });
+  const nodes=[...groups.values()].map(node=>({...node,value:countMode?node.count:node.scale,
+    color:treeNodeColor(node.l1Key,node.l2Key,node.l3Key)})).sort((a,b)=>b.value-a.value||a.name.localeCompare(b.name,'zh-CN'));
+  const total=nodes.reduce((sum,node)=>sum+node.value,0);
+  nodes.forEach(node=>{node.share=total>0?node.value/total*100:null;});
+  return {nodes,countMode,depth,total};
+}
+function selectTreeNode(node){
+  STATE.l1=node.l1Key||'ALL';STATE.l2=node.l2Key||'ALL';STATE.l3=node.l3Key||'ALL';
+  document.querySelectorAll('#chipBar .chip').forEach(c=>c.classList.toggle('active',c.dataset.l1===STATE.l1));
+  renderSubChips();renderAll();
+}
+function renderTree(){
+  const {nodes,countMode,depth}=treeDistribution(filteredProducts()),T=ct();
+  document.getElementById('treeTitle').textContent='投资类型 · '+(countMode?'数量':'规模')+'分布';
+  document.getElementById('treeHint').textContent=(countMode?'块大小代表基金家族数量':'块大小代表已披露规模')+(STATE.l3==='ALL'?' · 点击查看下一级':'');
+  document.getElementById('treeLevelLabel').textContent=['','一级大类','二级策略','三级细分'][depth];
+  document.getElementById('treeValueLabel').textContent='规模（亿元）';
+  const shareLabel=document.getElementById('treeValueLabel').nextElementSibling;
+  shareLabel.textContent=countMode?'数量占比':'规模占比';
+  document.getElementById('treeNote').textContent=countMode?'规模数据覆盖不足，面积与占比按基金家族数量计算。':'按已披露家族规模计算占比，A/C 等份额合并统计。';
+  const path=[{name:'全部类型',l1Key:null,l2Key:null,l3Key:null}];
+  if(STATE.l1!=='ALL')path.push({name:STATE.l1,l1Key:STATE.l1});
+  if(STATE.l2!=='ALL')path.push({name:STATE.l2,l1Key:STATE.l1,l2Key:STATE.l2});
+  if(STATE.l3!=='ALL')path.push({name:STATE.l3,l1Key:STATE.l1,l2Key:STATE.l2,l3Key:STATE.l3});
+  const pathEl=document.getElementById('treePath');
+  pathEl.innerHTML=path.map((node,index)=>(index?'<span aria-hidden="true">›</span>':'')+(index===path.length-1?
+    '<span aria-current="page">'+escapeHtml(node.name)+'</span>':'<button type="button" data-path="'+index+'">'+escapeHtml(node.name)+'</button>')).join('');
+  pathEl.onclick=event=>{const button=event.target.closest('button[data-path]');if(button)selectTreeNode(path[Number(button.dataset.path)]);};
+  const listEl=document.getElementById('treeList');
+  listEl.innerHTML=nodes.length?nodes.map((node,index)=>'<button type="button" class="tree-row" data-node="'+index+'"'+(STATE.l3!=='ALL'?' disabled':'')+' title="'+escapeHtml(node.name)+' · '+node.count+' 只基金家族">'+
+    '<span class="tree-row-name"><i class="tree-swatch" style="--tree-color:'+node.color+'" aria-hidden="true"></i><span>'+escapeHtml(node.name)+'</span></span>'+
+    '<span class="tree-row-value">'+(node.scale>0?fmt.scale(node.scale):'/')+'</span><span class="tree-row-share">'+(node.share!=null&&(countMode||node.scale>0)?fmt.num(node.share,node.share>0&&node.share<.1?2:1)+'%':'/')+'</span></button>').join(''):
+    '<div class="tree-empty">暂无符合条件的产品</div>';
+  listEl.onclick=event=>{const button=event.target.closest('button[data-node]');if(button&&!button.disabled)selectTreeNode(nodes[Number(button.dataset.node)]);};
+  const visible=nodes.filter(node=>node.value>0).map(node=>({...node,itemStyle:{color:node.color}}));
+  treeChart.setOption({backgroundColor:'transparent',
+    graphic:visible.length?[]:[emptyChartGraphic('暂无可展示数据')],
+    tooltip:{backgroundColor:T.tipBg,borderColor:T.tipBorder,textStyle:{color:T.tipText},extraCssText:TIP_GLASS,confine:true,
+      formatter:info=>{
+        const node=info.data;if(!node)return '';
+        return '<b>'+escapeHtml([node.l1Key,node.l2Key,node.l3Key].filter(Boolean).join(' · '))+'</b>'+
+          '<div>已披露规模 '+(node.scale>0?fmt.scale(node.scale)+' 亿元':'/')+'</div><div>基金家族 '+node.count.toLocaleString('zh-CN')+' 只</div>'+
+          '<div>'+(countMode?'数量':'规模')+'占比 '+fmt.num(node.share,node.share>0&&node.share<.1?2:1)+'%</div>';
+      }},
+    series:[{type:'treemap',breadcrumb:{show:false},roam:false,nodeClick:false,data:visible,animation:false,
+      top:2,bottom:2,left:2,right:2,visibleMin:0,sort:'desc',squareRatio:1.3,
+      itemStyle:{borderColor:T.treeBorder,borderWidth:2,gapWidth:5,borderRadius:8},
+      upperLabel:{show:false},
+      label:{show:true,color:'#303039',fontSize:13,fontWeight:600,align:'center',verticalAlign:'middle',lineHeight:21,
+        formatter:info=>info.data?info.data.name.replace(/(.{6})(?=.)/g,'$1\n')+'\n'+fmt.num(info.data.share,1)+'%':''},
+      labelLayout:params=>({fontSize:params.rect.width<92||params.rect.height<68?0:13}),
+      emphasis:{itemStyle:{borderColor:T.treeBorder,shadowBlur:8,shadowColor:'rgba(0,0,0,.10)'},label:{color:'#202028'}}}]
+  },true);
+  treeChart.off('click');treeChart.on('click',params=>{if(params.data&&STATE.l3==='ALL')selectTreeNode(params.data);});
 }
 
 function renderTable(){

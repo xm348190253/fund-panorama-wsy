@@ -151,6 +151,31 @@ DS.perfMap['000001']={scale:100,scaleDate:year+'-09-30',scaleSourceCode:'source-
 DS.perfMap['000002']={scale:100,scaleDate:year+'-09-30',scaleSourceCode:'source-a'};
 assert.equal(familyScale(PRODUCTS[0]),100,'redirect aliases of one source scale count once');
 const usedSources=new Set();assert.equal(familyScale(PRODUCTS[0],usedSources),100);assert.equal(familyScale(PRODUCTS[1],usedSources),null,'treemap source scale counts once across aggregate units');
+const distributionProducts=PRODUCTS.map(p=>({...p})),distributionPerf=DS.perfMap,distributionState={l1:STATE.l1,l2:STATE.l2,l3:STATE.l3};
+setProductsFromPool([
+  {code:'000301',name:'分类测试股票A',type:'股票型'},
+  {code:'000302',name:'分类测试股票C',type:'股票型'},
+  {code:'000303',name:'分类测试长期纯债A',type:'债券型-长债'},
+  {code:'000304',name:'分类测试中短债A',type:'债券型-中短债'}]);
+DS.perfMap={'000301':{scale:100,scaleDate:'2026-09-30',scaleSourceCode:'same-stock'},'000302':{scale:100,scaleDate:'2026-09-30',scaleSourceCode:'same-stock'},'000303':{scale:50}};
+STATE.l1='ALL';STATE.l2='ALL';STATE.l3='ALL';
+let distribution=treeDistribution(filteredProducts());
+assert.equal(distribution.depth,1);assert.equal(distribution.countMode,false);
+assert.equal(distribution.total,150,'single-level distribution preserves deduplicated source scale');
+assert.equal(distribution.nodes.reduce((n,x)=>n+x.count,0),3,'share variants remain one family');
+assert(distribution.nodes.every(x=>!x.children),'only the current hierarchy level is rendered');
+assert(Math.abs(distribution.nodes.reduce((n,x)=>n+x.share,0)-100)<1e-9);
+assert.equal(new Set(Object.keys(TREE_CATEGORY_INDEX).map(key=>treeNodeColor(key))).size,9,'top-level fund types have distinct pastel colors');
+STATE.l1='债券型';distribution=treeDistribution(filteredProducts());
+assert.equal(distribution.depth,2);assert.equal(distribution.nodes[0].name,'纯债');assert.equal(distribution.total,50);
+STATE.l2='纯债';distribution=treeDistribution(filteredProducts());
+assert.equal(distribution.depth,3);assert.equal(distribution.nodes.length,2);
+assert.equal(distribution.nodes.find(x=>x.name==='中短债').value,0,'missing scale is listed without fabricated treemap area');
+DS.perfMap={};distribution=treeDistribution(filteredProducts());
+assert.equal(distribution.countMode,true);assert.equal(distribution.total,2);assert(distribution.nodes.every(x=>x.share===50));
+STATE.l3='长期纯债';distribution=treeDistribution(filteredProducts());assert.equal(distribution.nodes.length,1);
+STATE.search='不存在的分类测试';distribution=treeDistribution(filteredProducts());assert.equal(distribution.nodes.length,0);assert.equal(distribution.total,0);
+STATE.search='';Object.assign(STATE,distributionState);setProductsFromPool(distributionProducts);DS.perfMap=distributionPerf;
 const elements=new Map();document.getElementById=id=>{if(!elements.has(id))elements.set(id,{});return elements.get(id);};
 SNAP.meta.marketTotal={totalTrillionYuan:37.64,asOf:'2026-01-31',sourceName:'中国证券投资基金业协会',sourceUrl:'https://www.amac.org.cn/'};
 STATE.search='';renderKpi();const originalTotal=elements.get('kpiScale').textContent;
