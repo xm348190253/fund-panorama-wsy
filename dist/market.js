@@ -510,8 +510,12 @@ updateTableHint=function(){
 const referenceRenderBubble=renderBubble;
 renderBubble=function(){referenceRenderBubble();
   const list=bubbleProducts();
-  const count=list.filter(p=>finite(getPerf(p).mdd)!=null&&finite(getPerf(p).y1)!=null).length;
-  document.getElementById('matrixCoverage').textContent=count.toLocaleString('zh-CN')+' / '+list.length.toLocaleString('zh-CN')+' 只具备历史回撤及一年收益';
+  const risk=list.filter(p=>!isMoneyFund(p.code)),money=list.filter(p=>isMoneyFund(p.code));
+  const count=risk.filter(p=>finite(getPerf(p).mdd)!=null&&finite(getPerf(p).y1)!=null).length;
+  const parts=[];
+  if(risk.length)parts.push(count.toLocaleString('zh-CN')+' / '+risk.length.toLocaleString('zh-CN')+' 只具备回撤及一年收益');
+  if(money.length)parts.push('货币 '+moneyBubbleRows(money).length.toLocaleString('zh-CN')+' / '+money.length.toLocaleString('zh-CN')+' 只具备规模及七日年化');
+  document.getElementById('matrixCoverage').textContent=parts.join(' · ');
   const original=bubbleChart.getOption().tooltip[0].formatter;
   if(typeof original==='function')bubbleChart.setOption({tooltip:{formatter:params=>{
     const pf=DS.perfMap[params.value&&params.value[3]]||{};
@@ -867,7 +871,7 @@ window.__startApp=async function(){
   document.getElementById('healthBtn').onclick=openHealthPanel;document.getElementById('healthClose').onclick=closeHealthPanel;document.getElementById('healthMask').onclick=closeHealthPanel;
   const shares=document.getElementById('toggleShares');shares.checked=false;shares.onchange=()=>{STATE.showAllShares=shares.checked;renderAll();};
   document.addEventListener('keydown',event=>{if(event.key==='Escape'){closeHealthPanel();closeDrawer();}});
-  window.addEventListener('resize',()=>[bubbleChart,treeChart,miniChart,compareChart].forEach(chart=>chart&&chart.resize()));
+  window.addEventListener('resize',()=>[bubbleChart,moneyChart,treeChart,miniChart,compareChart].forEach(chart=>chart&&chart.resize()));
   window.addEventListener('offline',updateSourceUI);window.addEventListener('online',updateSourceUI);
   window.__refreshAfterPerf=()=>{renderTable();renderKpi();renderBubble();renderTree();updateSourceUI();};
   applySnapshotModeUI();

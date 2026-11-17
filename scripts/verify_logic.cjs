@@ -226,6 +226,21 @@ STATE.bubbleTypes.delete('债券型|纯债');assert.equal(bubbleProducts()[0].co
 STATE.bubbleTypes.clear();referenceRenderBubble();assert.equal(capturedBubble.series.length,0);assert(capturedBubble.graphic[0].style.text.includes('勾选'));
 DS.perfMap['000201']={scale:10,y1:0,mdd:0};STATE.bubbleTypes.add('债券型|纯债');referenceRenderBubble();
 assert(capturedBubble.xAxis.min<0&&capturedBubble.xAxis.max>0);assert(capturedBubble.yAxis.min<0&&capturedBubble.yAxis.max>0);
+setProductsFromPool([{code:'000204',name:'测试货币A',type:'货币型-普通货币'},{code:'000205',name:'缺失七日年化货币A',type:'货币型-普通货币'},{code:'000206',name:'零收益货币A',type:'货币型-普通货币'}]);
+DS.perfMap={'000204':{scale:50,qrnh:1.25,wfsy:.3,y1:1.1,mdd:null,jzrq:'2026-11-16'},'000205':{scale:20,qrnh:null},'000206':{scale:5,qrnh:0,wfsy:0,y1:0}};
+STATE.bubbleTypes=new Set(['货币型|货币型']);
+// Use the normalized hierarchy keys from the actual pool rather than guessing a type label.
+STATE.bubbleTypes=new Set(PRODUCTS.map(p=>p.l1+'|'+p.l2));
+assert.equal(bubbleProducts().length,3,'money funds are offered by the scatter selector');
+assert.equal(moneyBubbleRows(bubbleProducts()).length,2,'missing yield is excluded, actual zero is retained');
+let capturedMoney;moneyChart={setOption(option){capturedMoney=option;},off(){},on(){},resize(){}};
+referenceRenderBubble();
+assert.equal(capturedMoney.series[0].data.length,2);assert.equal(capturedMoney.xAxis.type,'value');assert.equal(capturedMoney.yAxis.type,'value');
+assert.equal(capturedMoney.series[0].data[0].value[0],50);assert.equal(capturedMoney.series[0].data[0].value[1],1.25,'seven-day annualized values are already in percent');
+const moneyTip=capturedMoney.tooltip.formatter(capturedMoney.series[0].data[0]);
+assert(moneyTip.includes('1.250%')&&moneyTip.includes('0.3000 元')&&moneyTip.includes('1.10%'));
+assert(!moneyTip.includes('最大回撤'),'money is never assigned a fabricated zero-risk value');
+moneyChart=null;
 setProductsFromPool(chartProducts);DS.perfMap=chartPerf;document.getElementById=chartGet;STATE.bubbleTypes=new Set(['债券型|纯债']);bubbleChart=null;
 
 `,context);
