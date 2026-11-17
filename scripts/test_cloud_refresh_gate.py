@@ -76,6 +76,38 @@ class RefreshGateTests(unittest.TestCase):
         self.assertEqual(earlier_active(runs, 2), [])
         self.assertEqual([r['id'] for r in earlier_active(runs, 3)], [2])
 
+    def presentation(self, clock, receipt=None):
+        return choose_update({} if receipt is None else receipt,
+                             dt.datetime.fromisoformat('2026-11-18T' + clock + '+08:00'))[:2]
+
+    def test_presentation_starts_at_six_and_accepts_early_retries(self):
+        self.assertEqual(self.presentation('05:59:59'), (False, False))
+        for clock in ('06:00:00', '06:40:00', '07:10:00'):
+            self.assertEqual(self.presentation(clock), (True, False))
+
+    def test_presentation_success_prevents_duplicate_fund_collection(self):
+        receipt = dict(self.receipt('2026-11-18T06:50:00+08:00'), dataDate='2026-11-18')
+        self.assertEqual(self.presentation('07:00:00', receipt), (False, True))
+
+    def test_presentation_freeze_blocks_late_funds_and_ten_oclock_catchup(self):
+        for clock in ('07:15:00', '08:00:00', '08:30:00', '10:00:00', '10:43:00', '11:59:59'):
+            self.assertEqual(self.presentation(clock), (False, False))
+
+    def test_presentation_indices_resume_at_noon(self):
+        receipt = dict(self.receipt('2026-11-18T06:50:00+08:00'), dataDate='2026-11-18')
+        for clock in ('12:00:00', '14:00:00', '16:00:00'):
+            self.assertEqual(self.presentation(clock, receipt), (True, True))
+
+    def test_day_after_presentation_keeps_original_eight_and_ten(self):
+        for clock, expected in [('06:00:00', (False, False)), ('08:00:00', (True, False))]:
+            now = dt.datetime.fromisoformat('2026-11-19T' + clock + '+08:00')
+            self.assertEqual(choose_update({}, now)[:2], expected)
+        receipt = dict(self.receipt('2026-11-19T08:50:00+08:00'), dataDate='2026-11-19')
+        self.assertEqual(choose_update(receipt, dt.datetime.fromisoformat('2026-11-19T10:00:00+08:00'))[:2], (True, True))
+
+    def test_presentation_utc_trigger_maps_to_beijing_six(self):
+        self.assertEqual(choose_update({}, dt.datetime.fromisoformat('2026-11-17T22:00:00+00:00'))[:2], (True, False))
+
 
 if __name__ == '__main__':
     unittest.main()

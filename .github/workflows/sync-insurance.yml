@@ -26,7 +26,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           python - <<'PY'
-          import json, os, subprocess, urllib.request
+          import datetime as dt, json, os, subprocess, urllib.request
+          from zoneinfo import ZoneInfo
           repo = os.environ['GITHUB_REPOSITORY']
           request = urllib.request.Request('https://api.github.com/repos/' + repo + '/actions/runs?status=in_progress&per_page=100', headers={'Authorization': 'Bearer ' + os.environ['GH_TOKEN'], 'Accept': 'application/vnd.github+json'})
           with urllib.request.urlopen(request, timeout=30) as response:
@@ -34,10 +35,12 @@ jobs:
           own = os.environ['GITHUB_RUN_ID']
           paths = {'.github/workflows/daily-modelscope.yml', '.github/workflows/publish-dashboard.yml', '.github/workflows/sync-insurance.yml'}
           busy = any(str(r['id']) != own and r.get('path') in paths for r in runs)
-          if busy:
+          now = dt.datetime.now(ZoneInfo('Asia/Shanghai'))
+          protected = now.date() == dt.date(2026, 11, 18) and 5 <= now.hour < 12
+          if busy or protected:
               with open(os.environ['GITHUB_OUTPUT'], 'a') as out:
                   out.write('changed=false\n')
-              print('A publication is already running; check again at the next scheduled run.')
+              print('2026-11-18 presentation window: insurance publication resumes at 12:00.' if protected else 'A publication is already running; check again at the next scheduled run.')
           else:
               subprocess.run(['python', 'scripts/insurance_snapshot.py', '--check'], check=True)
           PY

@@ -11,6 +11,14 @@ from zoneinfo import ZoneInfo
 
 TZ = ZoneInfo('Asia/Shanghai')
 INDEX_HOURS = (10, 12, 14, 16)
+PRESENTATION_DATE = dt.date(2026, 11, 18)
+
+
+def presentation_deadline(now):
+    now = now.astimezone(TZ)
+    if now.date() == PRESENTATION_DATE and now.hour < 12:
+        return now.replace(hour=8, minute=30, second=0, microsecond=0)
+    return None
 
 
 def already_updated(receipt, today, force=False):
@@ -24,13 +32,19 @@ def choose_update(receipt, now, force=False, requested_quotes_only=False):
     today = now.date().isoformat()
     if force:
         return True, requested_quotes_only, '管理员立即更新：' + ('仅指数行情' if requested_quotes_only else '基金与指数')
-    if now.hour < 8:
+    if now.date() == PRESENTATION_DATE:
+        if now.hour < 6:
+            return False, False, '11月18日提前更新尚未到06:00。'
+        if now.replace(hour=7, minute=15, second=0, microsecond=0) <= now < now.replace(hour=12, minute=0, second=0, microsecond=0):
+            return False, False, '11月18日分享保护时段：停止新增全量采集，暂停10:00指数更新，12:00恢复。'
+    elif now.hour < 8:
         return False, False, '北京时间尚未到08:00，等待当日更新。'
     if not already_updated(receipt, today) and not requested_quotes_only:
         return True, False, '开始当日基金全量采集及指数更新：' + today
-    due = [hour for hour in INDEX_HOURS if hour <= now.hour]
+    hours = (12, 14, 16) if now.date() == PRESENTATION_DATE else INDEX_HOURS
+    due = [hour for hour in hours if hour <= now.hour]
     if not due:
-        return False, True, '当日基金数据已更新，等待10:00指数更新时段。'
+        return False, True, '当日基金数据已更新，等待' + str(hours[0]) + ':00指数更新时段。'
     slot = now.replace(hour=due[-1], minute=0, second=0, microsecond=0)
     collected = None
     if isinstance(receipt, dict) and receipt.get('status') == 'success' and receipt.get('verified') is True:
