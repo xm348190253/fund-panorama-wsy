@@ -93,7 +93,7 @@ def gh(args, payload=None, optional=False):
 
 
 def download(url):
-    request = urllib.request.Request(url, headers={'User-Agent': 'public-funds-release-verifier'})
+    request = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
     with urllib.request.urlopen(request, timeout=90) as response:
         return response.read(12 * 1024 * 1024)
 
@@ -136,10 +136,39 @@ def publish_assets(folder, manifest):
     return expected['release.json']['sha256']
 
 
-def update_pointer(manifest, manifest_hash):
-    pointer = {'version': manifest['version'], 'sourceVersion': manifest['sourceVersion'],
+def public_pointer(manifest, manifest_hash):
+    return {'version': manifest['version'], 'sourceVersion': manifest['sourceVersion'],
                'dataDate': manifest['dataDate'], 'sourceGeneratedAt': manifest['generatedAt'],
                'manifestSha256': manifest_hash, 'distribution': 'public-funds'}
+
+
+def is_current(manifest, manifest_hash):
+    endpoint = 'repos/' + REPOSITORY + '/contents/' + POINTER_PATH
+    result = gh(['api', endpoint], optional=True)
+    if result.returncode:
+        return False
+    payload = json.loads(result.stdout)
+    return json.loads(base64.b64decode(payload['content'])) == public_pointer(manifest, manifest_hash)
+
+
+def warm_public_site(manifest):
+    origin = 'https://fund-panorama-public-wsy.xmxmxm348190253.chatgpt.site/'
+
+    def verify(item):
+        name, expected = item
+        query = '?release=' + manifest['version'] + ('&raw=1' if name == 'index.html' else '')
+        data = download(origin + name + query)
+        if fingerprint(data) != expected:
+            raise ValueError('Standalone site checksum mismatch: ' + name)
+        return name
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:
+        verified = list(pool.map(verify, manifest['files'].items()))
+    print(json.dumps({'cachedStandaloneFiles': len(verified)}), flush=True)
+
+
+def update_pointer(manifest, manifest_hash):
+    pointer = public_pointer(manifest, manifest_hash)
     endpoint = 'repos/' + REPOSITORY + '/contents/' + POINTER_PATH
     for attempt in range(4):
         result = gh(['api', endpoint], optional=True)
@@ -180,7 +209,12 @@ def main():
         output = args.output or folder / 'public'
         manifest = build(source, output)
         if args.publish:
+            local_hash = fingerprint((output / 'release.json').read_bytes())['sha256']
+            if is_current(manifest, local_hash):
+                print('Public fund release is already current', flush=True)
+                return
             manifest_hash = publish_assets(output, manifest)
+            warm_public_site(manifest)
             update_pointer(manifest, manifest_hash)
         else:
             print(json.dumps({'version': manifest['version'], 'dataDate': manifest['dataDate'],
