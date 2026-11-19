@@ -1,7 +1,7 @@
 {
   "status": "success",
   "phase": "complete",
-  "startedAt": "2026-11-19T02:01:06.778728+00:00",
+  "startedAt": "2026-11-19T04:01:04.196012+00:00",
   "studio": "wangshuyang2126/fund-panorama-wsy",
   "url": "https://modelscope.cn/studios/wangshuyang2126/fund-panorama-wsy",
   "pushed": true,
@@ -9,14 +9,14 @@
   "verified": true,
   "automaticRollback": false,
   "insuranceVersion": "20261116T105602-ecdd86e4",
-  "version": "gh-44441114363-1",
+  "version": "gh-44455311751-1",
   "dataDate": "2026-11-19",
   "assetCount": 34,
-  "indexQuotesCollectedAt": "2026-11-19T10:01:05+08:00",
+  "indexQuotesCollectedAt": "2026-11-19T12:01:02+08:00",
   "indexQuotesAvailable": 9,
-  "previousCommit": "c66c5892746222fc1d08d9a61f99e9b7cb81ce8d",
-  "commit": "e7c3bf40bcc9ed050dbabfe74cb803230a0bcf2b",
+  "previousCommit": "e7c3bf40bcc9ed050dbabfe74cb803230a0bcf2b",
+  "commit": "124abd7f40638cdb0e516c049351ec5a74e3250b",
   "runtimeStatus": "Running",
   "runtimeHost": "https://wangshuyang2126-fund-panorama-wsy.ms.show",
-  "completedAt": "2026-11-19T02:09:52.801986+00:00"
+  "completedAt": "2026-11-19T04:10:25.327338+00:00"
 }
