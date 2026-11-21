@@ -1,8 +1,8 @@
 {
-  "version": "pf1-gh-44877812406-1",
-  "sourceVersion": "gh-44877812406-1",
+  "version": "pf1-gh-44882828678-1",
+  "sourceVersion": "gh-44882828678-1",
   "dataDate": "2026-11-21",
-  "sourceGeneratedAt": "2026-11-21T14:55:50+08:00",
-  "manifestSha256": "54eca8fe4932eafc566d94dd11efa2b1865da1002238f80ed4c4229642f00cc4",
+  "sourceGeneratedAt": "2026-11-21T16:01:00+08:00",
+  "manifestSha256": "f1f91ec5936e826ce9dc4924866fe1ef260262217998943ee38336cdc87e3d11",
   "distribution": "public-funds"
 }
